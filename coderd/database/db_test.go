@@ -115,7 +115,7 @@ func TestNestedInTxStricterIsolationDefaultParent(t *testing.T) {
 	var parentVal, requestedVal string
 	for _, f := range entries[0].Fields {
 		switch f.Name {
-		case "parent_isolation":
+		case "existing_isolation":
 			parentVal, _ = f.Value.(string)
 		case "requested_isolation":
 			requestedVal, _ = f.Value.(string)
@@ -156,7 +156,7 @@ func TestNestedInTxStricterIsolationBothExplicit(t *testing.T) {
 	var parentVal, requestedVal string
 	for _, f := range entries[0].Fields {
 		switch f.Name {
-		case "parent_isolation":
+		case "existing_isolation":
 			parentVal, _ = f.Value.(string)
 		case "requested_isolation":
 			requestedVal, _ = f.Value.(string)
