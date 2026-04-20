@@ -50,7 +50,7 @@ func TestGetDeploymentWorkspaceAgentStats(t *testing.T) {
 		sqlDB := testSQLDB(t)
 		err := migrations.Up(sqlDB)
 		require.NoError(t, err)
-		db := database.New(sqlDB)
+		db := database.New(sqlDB, slogtest.Make(t, nil))
 		ctx := context.Background()
 		dbgen.WorkspaceAgentStat(t, db, database.WorkspaceAgentStat{
 			TxBytes:                   1,
@@ -80,7 +80,7 @@ func TestGetDeploymentWorkspaceAgentStats(t *testing.T) {
 		sqlDB := testSQLDB(t)
 		err := migrations.Up(sqlDB)
 		require.NoError(t, err)
-		db := database.New(sqlDB)
+		db := database.New(sqlDB, slogtest.Make(t, nil))
 		ctx := context.Background()
 		agentID := uuid.New()
 		insertTime := dbtime.Now()
@@ -1119,7 +1119,7 @@ func TestGetAuthorizedWorkspacesAndAgentsByOwnerID(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	authorizer := rbac.NewStrictCachingAuthorizer(prometheus.NewRegistry())
 
 	org := dbgen.Organization(t, db, database.Organization{})
@@ -1244,7 +1244,7 @@ func TestGetAuthorizedChats(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	authorizer := rbac.NewStrictCachingAuthorizer(prometheus.NewRegistry())
 
 	// Create users with different roles.
@@ -1478,7 +1478,7 @@ func TestInsertWorkspaceAgentLogs(t *testing.T) {
 	ctx := context.Background()
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	org := dbgen.Organization(t, db, database.Organization{})
 	job := dbgen.ProvisionerJob(t, db, nil, database.ProvisionerJob{
 		OrganizationID: org.ID,
@@ -1523,7 +1523,7 @@ func TestProxyByHostname(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 
 	// Insert a bunch of different proxies.
 	proxies := []struct {
@@ -1651,7 +1651,7 @@ func TestDefaultProxy(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 
 	ctx := testutil.Context(t, testutil.WaitLong)
 	depID := uuid.NewString()
@@ -1706,7 +1706,7 @@ func TestQueuePosition(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	ctx := testutil.Context(t, testutil.WaitLong)
 
 	org := dbgen.Organization(t, db, database.Organization{})
@@ -1938,7 +1938,7 @@ func TestUserLastSeenFilter(t *testing.T) {
 		sqlDB := testSQLDB(t)
 		err := migrations.Up(sqlDB)
 		require.NoError(t, err)
-		db := database.New(sqlDB)
+		db := database.New(sqlDB, slogtest.Make(t, nil))
 		ctx := context.Background()
 		now := dbtime.Now()
 
@@ -2176,7 +2176,7 @@ func TestUserChangeLoginType(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	ctx := context.Background()
 
 	alice := dbgen.User(t, db, database.User{
@@ -2223,7 +2223,7 @@ func TestDefaultOrg(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	ctx := context.Background()
 
 	// Should start with the default org
@@ -2242,7 +2242,7 @@ func TestAuditLogDefaultLimit(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 
 	for i := 0; i < 110; i++ {
 		dbgen.AuditLog(t, db, database.AuditLog{})
@@ -2265,7 +2265,7 @@ func TestAuditLogCount(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 
 	ctx := testutil.Context(t, testutil.WaitLong)
 
@@ -2375,7 +2375,7 @@ func TestReadCustomRoles(t *testing.T) {
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
 
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	ctx := testutil.Context(t, testutil.WaitLong)
 
 	// Make a few site roles, and a few org roles
@@ -4265,7 +4265,7 @@ func TestArchiveVersions(t *testing.T) {
 		sqlDB := testSQLDB(t)
 		err := migrations.Up(sqlDB)
 		require.NoError(t, err)
-		db := database.New(sqlDB)
+		db := database.New(sqlDB, slogtest.Make(t, nil))
 		ctx := context.Background()
 
 		org := dbgen.Organization(t, db, database.Organization{})
@@ -4332,7 +4332,7 @@ func TestExpectOne(t *testing.T) {
 		sqlDB := testSQLDB(t)
 		err := migrations.Up(sqlDB)
 		require.NoError(t, err)
-		db := database.New(sqlDB)
+		db := database.New(sqlDB, slogtest.Make(t, nil))
 		ctx := context.Background()
 
 		_, err = database.ExpectOne(db.GetUsers(ctx, database.GetUsersParams{}))
@@ -4344,7 +4344,7 @@ func TestExpectOne(t *testing.T) {
 		sqlDB := testSQLDB(t)
 		err := migrations.Up(sqlDB)
 		require.NoError(t, err)
-		db := database.New(sqlDB)
+		db := database.New(sqlDB, slogtest.Make(t, nil))
 		ctx := context.Background()
 
 		// Create 2 organizations so the query returns >1
@@ -6058,7 +6058,7 @@ func TestWorkspacePrebuildsView(t *testing.T) {
 			sqlDB := testSQLDB(t)
 			err := migrations.Up(sqlDB)
 			require.NoError(t, err)
-			db := database.New(sqlDB)
+			db := database.New(sqlDB, slogtest.Make(t, nil))
 
 			ctx := testutil.Context(t, testutil.WaitShort)
 
@@ -9219,7 +9219,7 @@ func TestGetAuthenticatedWorkspaceAgentAndBuildByAuthToken_ShutdownScripts(t *te
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 
 	org := dbgen.Organization(t, db, database.Organization{})
 	owner := dbgen.User(t, db, database.User{})
@@ -10249,7 +10249,7 @@ func TestUpsertAISeats(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 	ctx := testutil.Context(t, testutil.WaitShort)
 
 	now := dbtime.Now()
@@ -11010,7 +11010,7 @@ func TestChatLabels(t *testing.T) {
 	sqlDB := testSQLDB(t)
 	err := migrations.Up(sqlDB)
 	require.NoError(t, err)
-	db := database.New(sqlDB)
+	db := database.New(sqlDB, slogtest.Make(t, nil))
 
 	ctx := testutil.Context(t, testutil.WaitMedium)
 	owner := dbgen.User(t, db, database.User{})
