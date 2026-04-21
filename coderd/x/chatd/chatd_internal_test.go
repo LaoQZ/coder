@@ -1993,16 +1993,7 @@ func TestSubscribeDeliversRetryEventViaPubsubOnce(t *testing.T) {
 	require.True(t, ok)
 	defer cancel()
 
-	retryingAt := time.Unix(1_700_000_000, 0).UTC()
-	expected := &codersdk.ChatStreamRetry{
-		Attempt:    1,
-		DelayMs:    (1500 * time.Millisecond).Milliseconds(),
-		Error:      "OpenAI is rate limiting requests (HTTP 429).",
-		Kind:       chaterror.KindRateLimit,
-		Provider:   "openai",
-		StatusCode: 429,
-		RetryingAt: retryingAt,
-	}
+	expected := newTestRetryPayload()
 
 	server.publishRetry(chatID, expected)
 
@@ -2032,28 +2023,18 @@ func TestSubscribeReplaysCurrentRetryPhaseInSnapshot(t *testing.T) {
 		db.EXPECT().GetChatByID(gomock.Any(), chatID).Return(chat, nil),
 	)
 
-	server := newSubscribeTestServer(t, db)
-	state := server.getOrCreateStreamState(chatID)
-	state.mu.Lock()
-	state.buffering = true
-	state.mu.Unlock()
+	server := newBufferedSubscribeTestServer(t, db, chatID)
 
-	retryingAt := time.Unix(1_700_000_000, 0).UTC()
-	expected := &codersdk.ChatStreamRetry{
-		Attempt:    1,
-		DelayMs:    (1500 * time.Millisecond).Milliseconds(),
-		Error:      "OpenAI is rate limiting requests (HTTP 429).",
-		Kind:       chaterror.KindRateLimit,
-		Provider:   "openai",
-		StatusCode: 429,
-		RetryingAt: retryingAt,
-	}
+	expected := newTestRetryPayload()
 	server.publishRetry(chatID, expected)
 
 	snapshot, events, cancel, ok := server.Subscribe(ctx, chatID, nil, 0)
 	require.True(t, ok)
 	defer cancel()
 
+	require.Len(t, snapshot, 2)
+	require.Equal(t, codersdk.ChatStreamEventTypeStatus, snapshot[0].Type)
+	require.Equal(t, codersdk.ChatStreamEventTypeRetry, snapshot[1].Type)
 	event := requireSnapshotRetryEvent(t, snapshot)
 	require.Equal(t, expected, event.Retry)
 	requireNoStreamEvent(t, events, 200*time.Millisecond)
@@ -2070,15 +2051,7 @@ func TestSubscribeCapturesRetryPhaseAtSubscriptionBoundary(t *testing.T) {
 
 	chatID := uuid.New()
 	chat := database.Chat{ID: chatID, Status: database.ChatStatusRunning}
-	expected := &codersdk.ChatStreamRetry{
-		Attempt:    1,
-		DelayMs:    time.Second.Milliseconds(),
-		Error:      "OpenAI is rate limiting requests (HTTP 429).",
-		Kind:       chaterror.KindRateLimit,
-		Provider:   "openai",
-		StatusCode: 429,
-		RetryingAt: time.Unix(1_700_000_000, 0).UTC(),
-	}
+	expected := newTestRetryPayload()
 
 	server := newSubscribeTestServer(t, db)
 
@@ -2125,21 +2098,9 @@ func TestSubscribeDoesNotReplayRetryAfterStreamResumes(t *testing.T) {
 		db.EXPECT().GetChatByID(gomock.Any(), chatID).Return(chat, nil),
 	)
 
-	server := newSubscribeTestServer(t, db)
-	state := server.getOrCreateStreamState(chatID)
-	state.mu.Lock()
-	state.buffering = true
-	state.mu.Unlock()
+	server := newBufferedSubscribeTestServer(t, db, chatID)
 
-	server.publishRetry(chatID, &codersdk.ChatStreamRetry{
-		Attempt:    1,
-		DelayMs:    time.Second.Milliseconds(),
-		Error:      "OpenAI is rate limiting requests (HTTP 429).",
-		Kind:       chaterror.KindRateLimit,
-		Provider:   "openai",
-		StatusCode: 429,
-		RetryingAt: time.Unix(1_700_000_000, 0).UTC(),
-	})
+	server.publishRetry(chatID, newTestRetryPayload())
 	server.publishMessagePart(chatID, codersdk.ChatMessageRoleAssistant, codersdk.ChatMessageText("retry recovered"))
 
 	snapshot, events, cancel, ok := server.Subscribe(ctx, chatID, nil, 0)
@@ -2172,21 +2133,9 @@ func TestSubscribeDoesNotReplayRetryAfterTerminalError(t *testing.T) {
 		db.EXPECT().GetChatByID(gomock.Any(), chatID).Return(chat, nil),
 	)
 
-	server := newSubscribeTestServer(t, db)
-	state := server.getOrCreateStreamState(chatID)
-	state.mu.Lock()
-	state.buffering = true
-	state.mu.Unlock()
+	server := newBufferedSubscribeTestServer(t, db, chatID)
 
-	server.publishRetry(chatID, &codersdk.ChatStreamRetry{
-		Attempt:    1,
-		DelayMs:    time.Second.Milliseconds(),
-		Error:      "OpenAI is rate limiting requests (HTTP 429).",
-		Kind:       chaterror.KindRateLimit,
-		Provider:   "openai",
-		StatusCode: 429,
-		RetryingAt: time.Unix(1_700_000_000, 0).UTC(),
-	})
+	server.publishRetry(chatID, newTestRetryPayload())
 	server.publishError(chatID, chaterror.ClassifiedError{
 		Message:    "OpenAI is rate limiting requests (HTTP 429).",
 		Kind:       chaterror.KindRateLimit,
@@ -2203,7 +2152,7 @@ func TestSubscribeDoesNotReplayRetryAfterTerminalError(t *testing.T) {
 	requireNoStreamEvent(t, events, 200*time.Millisecond)
 }
 
-func TestSubscribeDoesNotReplayRetryAfterCompletionCleanup(t *testing.T) {
+func TestSubscribeDoesNotReplayRetryAfterTerminalStatus(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -2224,22 +2173,10 @@ func TestSubscribeDoesNotReplayRetryAfterCompletionCleanup(t *testing.T) {
 		db.EXPECT().GetChatByID(gomock.Any(), chatID).Return(chat, nil),
 	)
 
-	server := newSubscribeTestServer(t, db)
-	state := server.getOrCreateStreamState(chatID)
-	state.mu.Lock()
-	state.buffering = true
-	state.mu.Unlock()
+	server := newBufferedSubscribeTestServer(t, db, chatID)
 
-	server.publishRetry(chatID, &codersdk.ChatStreamRetry{
-		Attempt:    1,
-		DelayMs:    time.Second.Milliseconds(),
-		Error:      "OpenAI is rate limiting requests (HTTP 429).",
-		Kind:       chaterror.KindRateLimit,
-		Provider:   "openai",
-		StatusCode: 429,
-		RetryingAt: time.Unix(1_700_000_000, 0).UTC(),
-	})
-	server.clearCurrentRetryPhase(chatID)
+	server.publishRetry(chatID, newTestRetryPayload())
+	server.publishStatus(chatID, database.ChatStatusCompleted, uuid.NullUUID{})
 
 	snapshot, events, cancel, ok := server.Subscribe(ctx, chatID, nil, 0)
 	require.True(t, ok)
@@ -2324,6 +2261,18 @@ func TestSubscribeFallsBackToLegacyErrorStringViaPubsub(t *testing.T) {
 	requireNoStreamEvent(t, events, 200*time.Millisecond)
 }
 
+func newTestRetryPayload() *codersdk.ChatStreamRetry {
+	return &codersdk.ChatStreamRetry{
+		Attempt:    1,
+		DelayMs:    (1500 * time.Millisecond).Milliseconds(),
+		Error:      "OpenAI is rate limiting requests (HTTP 429).",
+		Kind:       chaterror.KindRateLimit,
+		Provider:   "openai",
+		StatusCode: 429,
+		RetryingAt: time.Unix(1_700_000_000, 0).UTC(),
+	}
+}
+
 func newSubscribeTestServer(t *testing.T, db database.Store) *Server {
 	t.Helper()
 
@@ -2332,6 +2281,17 @@ func newSubscribeTestServer(t *testing.T, db database.Store) *Server {
 		logger: slogtest.Make(t, &slogtest.Options{IgnoreErrors: true}),
 		pubsub: dbpubsub.NewInMemory(),
 	}
+}
+
+func newBufferedSubscribeTestServer(t *testing.T, db database.Store, chatID uuid.UUID) *Server {
+	t.Helper()
+
+	server := newSubscribeTestServer(t, db)
+	state := server.getOrCreateStreamState(chatID)
+	state.mu.Lock()
+	state.buffering = true
+	state.mu.Unlock()
+	return server
 }
 
 func requireStreamMessageEvent(t *testing.T, events <-chan codersdk.ChatStreamEvent) codersdk.ChatStreamEvent {
