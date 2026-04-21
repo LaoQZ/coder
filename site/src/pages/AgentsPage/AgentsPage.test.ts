@@ -605,3 +605,295 @@ describe("useFileAttachments persistence", () => {
 		unmount();
 	});
 });
+
+// Synthetic resize swaps the File without invoking the browser's
+// decoder, so these tests run in jsdom without resizeImage.ts fakes.
+describe("useFileAttachments processResizes", () => {
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	// File whose reported `size` exceeds the Anthropic budget
+	// without actually allocating bytes, keeping the test cheap.
+	const makeOversizeImage = (
+		name = "photo.png",
+		type = "image/png",
+		bytes = 6 * 1024 * 1024,
+	) => {
+		const file = new File([new Uint8Array(8)], name, { type });
+		Object.defineProperty(file, "size", { value: bytes });
+		return file;
+	};
+
+	it("marks oversize images as processing synchronously on attach", async () => {
+		const resize = await import("./utils/resizeImage");
+		// Stub resize to never resolve so the processing state is
+		// observable across multiple renders.
+		vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+			() => new Promise(() => undefined),
+		);
+
+		const { result, unmount } = renderHook(() =>
+			useFileAttachments("org-1", { provider: "anthropic" }),
+		);
+
+		const file = makeOversizeImage();
+
+		act(() => {
+			result.current.handleAttach([file]);
+		});
+
+		expect(result.current.attachments).toHaveLength(1);
+		expect(result.current.attachments[0]).toBe(file);
+		const state = result.current.uploadStates.get(file);
+		expect(state?.status).toBe("processing");
+		unmount();
+	});
+
+	it("swaps the original File for the resized replacement when resize succeeds", async () => {
+		const resize = await import("./utils/resizeImage");
+		const { API } = await import("#/api/api");
+		const replacement = new File([new Uint8Array(1024)], "photo.webp", {
+			type: "image/webp",
+		});
+		vi.spyOn(resize, "resizeImageToMaxBytes").mockResolvedValue(replacement);
+		vi.spyOn(API.experimental, "uploadChatFile").mockResolvedValue({
+			id: "file-id",
+		});
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response());
+
+		const { result, unmount } = renderHook(() =>
+			useFileAttachments("org-1", { provider: "anthropic" }),
+		);
+
+		const original = makeOversizeImage();
+
+		act(() => {
+			result.current.handleAttach([original]);
+		});
+
+		await vi.waitFor(() => {
+			expect(result.current.attachments[0]).toBe(replacement);
+		});
+
+		// Upload state should belong to the replacement, not the
+		// original, after the swap.
+		await vi.waitFor(() => {
+			expect(result.current.uploadStates.get(replacement)?.status).toBe(
+				"uploaded",
+			);
+		});
+		expect(result.current.uploadStates.get(original)).toBeUndefined();
+		unmount();
+	});
+
+	it("falls back to the original File when resize returns null", async () => {
+		const resize = await import("./utils/resizeImage");
+		const { API } = await import("#/api/api");
+		vi.spyOn(resize, "resizeImageToMaxBytes").mockResolvedValue(null);
+		vi.spyOn(API.experimental, "uploadChatFile").mockResolvedValue({
+			id: "file-id",
+		});
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response());
+
+		// Use a non-Anthropic provider so the 10 MiB default budget
+		// applies; file at 3 MiB is under that budget but would have
+		// hit the resize path if it were over. We force the resize
+		// path by giving resize a null response for an over-budget
+		// image on Anthropic instead.
+		const { result, unmount } = renderHook(() =>
+			useFileAttachments("org-1", { provider: "anthropic" }),
+		);
+
+		const original = makeOversizeImage(
+			"photo.png",
+			"image/png",
+			6 * 1024 * 1024,
+		);
+
+		act(() => {
+			result.current.handleAttach([original]);
+		});
+
+		// After resize returns null, the original is still 6 MiB
+		// which exceeds Anthropic's ~5 MiB budget, so the hook
+		// surfaces the provider-budget error instead of uploading.
+		await vi.waitFor(() => {
+			const state = result.current.uploadStates.get(original);
+			expect(state?.status).toBe("error");
+			expect(state?.error).toMatch(/Anthropic/);
+			expect(state?.error).toMatch(/MiB/);
+		});
+		unmount();
+	});
+
+	it("freezes the provider snapshot at attach time so a mid-resize provider switch can't mislabel the error", async () => {
+		const resize = await import("./utils/resizeImage");
+		let releaseResize: (value: File | null) => void = () => undefined;
+		vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+			() =>
+				new Promise<File | null>((resolve) => {
+					releaseResize = resolve;
+				}),
+		);
+
+		const { result, rerender, unmount } = renderHook(
+			({ provider }) => useFileAttachments("org-1", { provider }),
+			{ initialProps: { provider: "anthropic" } },
+		);
+
+		// Attach on Anthropic (5 MiB budget).
+		const original = makeOversizeImage(
+			"photo.gif",
+			"image/gif",
+			6 * 1024 * 1024,
+		);
+		act(() => {
+			result.current.handleAttach([original]);
+		});
+
+		// User switches to OpenAI (10 MiB budget) before the
+		// resize finishes. providerRef.current is now "openai".
+		rerender({ provider: "openai" });
+
+		// Resize gives up (animated GIF; falls back to original).
+		await act(async () => {
+			releaseResize(null);
+			await Promise.resolve();
+		});
+
+		// Error must name Anthropic (the provider whose budget
+		// rejected the file), not OpenAI (the live ref). The
+		// budget value in the error must match Anthropic's
+		// ~5 MiB, not OpenAI's ~10 MiB.
+		await vi.waitFor(() => {
+			const state = result.current.uploadStates.get(original);
+			expect(state?.status).toBe("error");
+			expect(state?.error).toMatch(/Anthropic/);
+			expect(state?.error).not.toMatch(/OpenAI/);
+			// The budget number in the error message should be
+			// 5.0 MiB (Anthropic's), not 10.0 MiB (OpenAI's).
+			expect(state?.error).toMatch(/under 5\.0 MiB/);
+		});
+		unmount();
+	});
+
+	it("does not resurrect attachments removed while resize is in flight", async () => {
+		const resize = await import("./utils/resizeImage");
+		let releaseResize: (value: File | null) => void = () => undefined;
+		vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+			() =>
+				new Promise<File | null>((resolve) => {
+					releaseResize = resolve;
+				}),
+		);
+
+		const { result, unmount } = renderHook(() =>
+			useFileAttachments("org-1", { provider: "anthropic" }),
+		);
+
+		const original = makeOversizeImage();
+
+		act(() => {
+			result.current.handleAttach([original]);
+		});
+		expect(result.current.attachments).toHaveLength(1);
+
+		// Remove the attachment while resize is still pending.
+		act(() => {
+			result.current.handleRemoveAttachment(original);
+		});
+		expect(result.current.attachments).toHaveLength(0);
+
+		// Resolve the pending resize with a swap; the hook must
+		// NOT resurrect the dismissed attachment.
+		const replacement = new File([new Uint8Array(512)], "photo.webp", {
+			type: "image/webp",
+		});
+		await act(async () => {
+			releaseResize(replacement);
+			await Promise.resolve();
+		});
+
+		expect(result.current.attachments).toHaveLength(0);
+		expect(result.current.uploadStates.get(replacement)).toBeUndefined();
+		unmount();
+	});
+
+	it("does not resurrect attachments after resetAttachments fires", async () => {
+		const resize = await import("./utils/resizeImage");
+		let releaseResize: (value: File | null) => void = () => undefined;
+		vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+			() =>
+				new Promise<File | null>((resolve) => {
+					releaseResize = resolve;
+				}),
+		);
+
+		const { result, unmount } = renderHook(() =>
+			useFileAttachments("org-1", { provider: "anthropic" }),
+		);
+
+		const original = makeOversizeImage();
+
+		act(() => {
+			result.current.handleAttach([original]);
+		});
+		expect(result.current.attachments).toHaveLength(1);
+
+		// Simulate a chat-scope reset (e.g. ChatPageContent's
+		// editScopeRef effect when navigating between chats)
+		// while the resize is still pending.
+		act(() => {
+			result.current.resetAttachments();
+		});
+		expect(result.current.attachments).toHaveLength(0);
+
+		// Resolve the pending resize with a swap. The hook must
+		// not re-add the replacement to attachments or kick off
+		// an upload against the now-cleared scope.
+		const replacement = new File([new Uint8Array(512)], "photo.webp", {
+			type: "image/webp",
+		});
+		await act(async () => {
+			releaseResize(replacement);
+			await Promise.resolve();
+		});
+
+		expect(result.current.attachments).toHaveLength(0);
+		expect(result.current.uploadStates.get(replacement)).toBeUndefined();
+		expect(result.current.uploadStates.get(original)).toBeUndefined();
+		unmount();
+	});
+
+	it("gates the send-reachable isUploading state on processing", () => {
+		const resize = import("./utils/resizeImage");
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response());
+		// Never-resolving resize keeps the attachment in "processing".
+		void resize.then((m) =>
+			vi
+				.spyOn(m, "resizeImageToMaxBytes")
+				.mockImplementation(() => new Promise(() => undefined)),
+		);
+
+		const { result, unmount } = renderHook(() =>
+			useFileAttachments("org-1", { provider: "anthropic" }),
+		);
+
+		const file = makeOversizeImage();
+
+		act(() => {
+			result.current.handleAttach([file]);
+		});
+
+		// Upload state must be "processing" (not "uploaded" or
+		// undefined). The AgentChatInput send gate treats this the
+		// same as "uploading" and blocks dispatch.
+		expect(result.current.uploadStates.get(file)?.status).toBe("processing");
+		unmount();
+	});
+});

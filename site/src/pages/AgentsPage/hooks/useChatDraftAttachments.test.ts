@@ -370,7 +370,7 @@ describe("useChatDraftAttachments", () => {
 		expect(result.current.attachments).toHaveLength(1);
 		expect(result.current.uploadStates.get(file)).toMatchObject({
 			status: "error",
-			error: expect.stringContaining("Maximum is 10 MB"),
+			error: expect.stringContaining("Maximum is 10 MiB"),
 		});
 		expect(localStorage.getItem(storageKey)).toBeNull();
 		unmount();
@@ -522,5 +522,306 @@ describe("useChatDraftAttachments", () => {
 		expect(stored).toHaveLength(1);
 		expect(stored[0].clientId).toBe("good");
 		unmount();
+	});
+
+	describe("compose-path resize", () => {
+		// Helper: an image just over Anthropic's 5 MiB inline-image
+		// budget. The hook treats anything over budget as needing
+		// resize regardless of the actual byte content.
+		const makeOversizeImage = () =>
+			new File([new Uint8Array(5 * 1024 * 1024 + 64 * 1024)], "photo.png", {
+				type: "image/png",
+				lastModified: 100,
+			});
+
+		it("commits the original synchronously with status: processing while resize is in flight", async () => {
+			const resize = await import("../utils/resizeImage");
+			vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+				() => new Promise<File | null>(() => undefined),
+			);
+			const uploadSpy = vi.spyOn(API.experimental, "uploadChatFile");
+
+			const { result, unmount } = renderHook(() =>
+				useChatDraftAttachments(orgID, chatID, { provider: "anthropic" }),
+			);
+			const original = makeOversizeImage();
+
+			act(() => {
+				result.current.handleAttach([original]);
+			});
+
+			// Original should be in state immediately, marked
+			// "processing" so the send gate blocks dispatch.
+			expect(result.current.attachments).toHaveLength(1);
+			expect(result.current.attachments[0]).toBe(original);
+			expect(result.current.uploadStates.get(original)).toMatchObject({
+				status: "processing",
+			});
+			// No upload yet; no localStorage write yet (registry
+			// entry is created post-resize).
+			expect(uploadSpy).not.toHaveBeenCalled();
+			expect(localStorage.getItem(storageKey)).toBeNull();
+			unmount();
+		});
+
+		it("swaps the original for a smaller resized File and starts the upload", async () => {
+			const upload = createDeferred<{ id: string }>();
+			const uploadSpy = vi
+				.spyOn(API.experimental, "uploadChatFile")
+				.mockReturnValue(upload.promise);
+			const resize = await import("../utils/resizeImage");
+			const replacement = new File(
+				[new Uint8Array(2 * 1024 * 1024)],
+				"photo.webp",
+				{ type: "image/webp", lastModified: 200 },
+			);
+			let releaseResize: (value: File | null) => void = () => undefined;
+			vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+				() =>
+					new Promise<File | null>((resolveFn) => {
+						releaseResize = resolveFn;
+					}),
+			);
+
+			const { result, unmount } = renderHook(() =>
+				useChatDraftAttachments(orgID, chatID, { provider: "anthropic" }),
+			);
+			const original = makeOversizeImage();
+
+			act(() => {
+				result.current.handleAttach([original]);
+			});
+			expect(result.current.uploadStates.get(original)?.status).toBe(
+				"processing",
+			);
+
+			await act(async () => {
+				releaseResize(replacement);
+				await Promise.resolve();
+			});
+
+			// The view should now point at the replacement File and
+			// the original should no longer be tracked.
+			await vi.waitFor(() => {
+				expect(result.current.attachments).toHaveLength(1);
+				expect(result.current.attachments[0]).toBe(replacement);
+			});
+			expect(result.current.uploadStates.get(original)).toBeUndefined();
+			expect(uploadSpy).toHaveBeenCalledTimes(1);
+			expect(uploadSpy).toHaveBeenCalledWith(replacement, orgID);
+
+			await act(async () => {
+				upload.resolve({ id: "file-resized" });
+			});
+			await vi.waitFor(() => {
+				expect(result.current.uploadStates.get(replacement)).toMatchObject({
+					status: "uploaded",
+					fileId: "file-resized",
+				});
+			});
+			unmount();
+		});
+
+		it("falls back to the original and surfaces a provider-budget error when resize returns null on Anthropic", async () => {
+			const uploadSpy = vi.spyOn(API.experimental, "uploadChatFile");
+			const resize = await import("../utils/resizeImage");
+			vi.spyOn(resize, "resizeImageToMaxBytes").mockResolvedValue(null);
+
+			const { result, unmount } = renderHook(() =>
+				useChatDraftAttachments(orgID, chatID, { provider: "anthropic" }),
+			);
+			const original = makeOversizeImage();
+
+			act(() => {
+				result.current.handleAttach([original]);
+			});
+			await vi.waitFor(() => {
+				const state = result.current.uploadStates.get(original);
+				expect(state?.status).toBe("error");
+				expect(state?.error).toMatch(/Anthropic/);
+				expect(state?.error).toMatch(/MiB/);
+			});
+			// No upload should have been started.
+			expect(uploadSpy).not.toHaveBeenCalled();
+			expect(localStorage.getItem(storageKey)).toBeNull();
+			unmount();
+		});
+
+		it("does not resurrect attachments removed while resize is in flight", async () => {
+			const uploadSpy = vi.spyOn(API.experimental, "uploadChatFile");
+			const resize = await import("../utils/resizeImage");
+			let releaseResize: (value: File | null) => void = () => undefined;
+			vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+				() =>
+					new Promise<File | null>((resolveFn) => {
+						releaseResize = resolveFn;
+					}),
+			);
+
+			const { result, unmount } = renderHook(() =>
+				useChatDraftAttachments(orgID, chatID, { provider: "anthropic" }),
+			);
+			const original = makeOversizeImage();
+
+			act(() => {
+				result.current.handleAttach([original]);
+			});
+			expect(result.current.attachments).toHaveLength(1);
+
+			act(() => {
+				result.current.handleRemoveAttachment(original);
+			});
+			expect(result.current.attachments).toHaveLength(0);
+
+			const replacement = new File(
+				[new Uint8Array(1 * 1024 * 1024)],
+				"photo.webp",
+				{ type: "image/webp" },
+			);
+			await act(async () => {
+				releaseResize(replacement);
+				await Promise.resolve();
+			});
+
+			expect(result.current.attachments).toHaveLength(0);
+			expect(uploadSpy).not.toHaveBeenCalled();
+			expect(localStorage.getItem(storageKey)).toBeNull();
+			unmount();
+		});
+
+		it("does not resurrect attachments after resetAttachments fires", async () => {
+			const uploadSpy = vi.spyOn(API.experimental, "uploadChatFile");
+			const resize = await import("../utils/resizeImage");
+			let releaseResize: (value: File | null) => void = () => undefined;
+			vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+				() =>
+					new Promise<File | null>((resolveFn) => {
+						releaseResize = resolveFn;
+					}),
+			);
+
+			const { result, unmount } = renderHook(() =>
+				useChatDraftAttachments(orgID, chatID, { provider: "anthropic" }),
+			);
+			const original = makeOversizeImage();
+
+			act(() => {
+				result.current.handleAttach([original]);
+			});
+			expect(result.current.attachments).toHaveLength(1);
+
+			act(() => {
+				result.current.resetAttachments();
+			});
+			expect(result.current.attachments).toHaveLength(0);
+
+			const replacement = new File(
+				[new Uint8Array(1 * 1024 * 1024)],
+				"photo.webp",
+				{ type: "image/webp" },
+			);
+			await act(async () => {
+				releaseResize(replacement);
+				await Promise.resolve();
+			});
+
+			expect(result.current.attachments).toHaveLength(0);
+			expect(uploadSpy).not.toHaveBeenCalled();
+			expect(localStorage.getItem(storageKey)).toBeNull();
+			unmount();
+		});
+
+		it("freezes the provider snapshot at attach time so a mid-resize provider switch can't mislabel the error", async () => {
+			const resize = await import("../utils/resizeImage");
+			let releaseResize: (value: File | null) => void = () => undefined;
+			vi.spyOn(resize, "resizeImageToMaxBytes").mockImplementation(
+				() =>
+					new Promise<File | null>((resolveFn) => {
+						releaseResize = resolveFn;
+					}),
+			);
+
+			const { result, rerender, unmount } = renderHook(
+				({ provider }) => useChatDraftAttachments(orgID, chatID, { provider }),
+				{ initialProps: { provider: "anthropic" } },
+			);
+
+			// Animated GIF with size that exceeds Anthropic's
+			// 5 MiB budget but fits OpenAI's 10 MiB budget.
+			const gif = new File([new Uint8Array(8)], "animated.gif", {
+				type: "image/gif",
+				lastModified: 400,
+			});
+			Object.defineProperty(gif, "size", { value: 6 * 1024 * 1024 });
+
+			act(() => {
+				result.current.handleAttach([gif]);
+			});
+
+			// User switches to OpenAI before the resize finishes.
+			rerender({ provider: "openai" });
+
+			// Resize gives up; we fall back to the original.
+			await act(async () => {
+				releaseResize(null);
+				await Promise.resolve();
+			});
+
+			// Error must name Anthropic (the provider whose
+			// budget rejected the file at attach time), not
+			// OpenAI (the live provider after the switch).
+			await vi.waitFor(() => {
+				const state = result.current.uploadStates.get(gif);
+				expect(state?.status).toBe("error");
+				expect(state?.error).toMatch(/Anthropic/);
+				expect(state?.error).not.toMatch(/OpenAI/);
+				// 5.0 MiB (Anthropic), not 10.0 MiB (OpenAI).
+				expect(state?.error).toMatch(/under 5\.0 MiB/);
+			});
+			unmount();
+		});
+
+		it("uses the default 10 MiB budget for non-Anthropic providers (no resize for sub-10MiB images)", async () => {
+			const upload = createDeferred<{ id: string }>();
+			const uploadSpy = vi
+				.spyOn(API.experimental, "uploadChatFile")
+				.mockReturnValue(upload.promise);
+			const resize = await import("../utils/resizeImage");
+			const resizeSpy = vi
+				.spyOn(resize, "resizeImageToMaxBytes")
+				.mockResolvedValue(null);
+
+			const { result, unmount } = renderHook(() =>
+				useChatDraftAttachments(orgID, chatID, { provider: "openai" }),
+			);
+			// 7 MiB image: over Anthropic's 5 MiB budget but under
+			// the default 10 MiB budget. Should NOT be resized for
+			// OpenAI; should upload directly.
+			const file = new File([new Uint8Array(7 * 1024 * 1024)], "medium.png", {
+				type: "image/png",
+				lastModified: 300,
+			});
+
+			act(() => {
+				result.current.handleAttach([file]);
+			});
+
+			expect(resizeSpy).not.toHaveBeenCalled();
+			await vi.waitFor(() => {
+				expect(uploadSpy).toHaveBeenCalledTimes(1);
+				expect(uploadSpy).toHaveBeenCalledWith(file, orgID);
+			});
+
+			await act(async () => {
+				upload.resolve({ id: "file-direct" });
+			});
+			await vi.waitFor(() => {
+				expect(result.current.uploadStates.get(file)).toMatchObject({
+					status: "uploaded",
+					fileId: "file-direct",
+				});
+			});
+			unmount();
+		});
 	});
 });

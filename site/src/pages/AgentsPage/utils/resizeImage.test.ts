@@ -70,6 +70,32 @@ describe("resizeImageToMaxBytes", () => {
 		const result = await resizeImageToMaxBytes(file, 1024 * 1024);
 		expect(result).toBeNull();
 	});
+
+	it("accepts image/jpg alias alongside image/jpeg", async () => {
+		// Pins the non-IANA `image/jpg` alias in RESIZABLE_MIME_TYPES.
+		// The under-budget passthrough is enough to prove acceptance;
+		// the over-budget case in the stubbed-decoder block proves
+		// the encode pipeline runs.
+		const under = new File([new Uint8Array(512)], "icon.jpg", {
+			type: "image/jpg",
+		});
+		const result = await resizeImageToMaxBytes(under, 4096);
+		expect(result).toBe(under);
+	});
+
+	it("returns an under-budget unsupported-MIME image unchanged", async () => {
+		// Passes an under-budget AVIF/BMP/SVG through without
+		// touching it. The function's contract is "give me
+		// something <= maxBytes" and the caller already has that,
+		// so there's no reason to refuse the file just because we
+		// wouldn't know how to re-encode it if it were oversized.
+		const bytes = new Uint8Array(512);
+		const file = new File([bytes], "icon.bmp", {
+			type: "image/bmp",
+		});
+		const result = await resizeImageToMaxBytes(file, 4096);
+		expect(result).toBe(file);
+	});
 });
 
 describe("resizeImageToMaxBytes with stubbed decoders", () => {
@@ -96,9 +122,16 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 			encodeCalls: [],
 		};
 
-		// Fake createImageBitmap: respects resizeWidth/Height the way
-		// the production code relies on (clamp-in-box, preserve
-		// aspect ratio), and records each call for assertions.
+		// Fake createImageBitmap matching the HTML spec output rules:
+		//   - both resize dims => stretch (no aspect-ratio preservation).
+		//   - only resizeWidth => width exact, height proportional.
+		//     UPSCALES if resizeWidth > source width.
+		//   - only resizeHeight => mirror of above.
+		//   - neither => source dimensions unchanged.
+		//
+		// Critical that the fake doesn't cap at source dimensions:
+		// real browsers follow the spec and upscale, so production
+		// code must handle that. A capped fake would mask the bug.
 		vi.stubGlobal(
 			"createImageBitmap",
 			vi.fn(
@@ -113,16 +146,25 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 					if (state.decodeThrows) {
 						throw new Error("decode boom");
 					}
-					let w = state.srcWidth;
-					let h = state.srcHeight;
-					const limit = Math.min(
-						options?.resizeWidth ?? Number.POSITIVE_INFINITY,
-						options?.resizeHeight ?? Number.POSITIVE_INFINITY,
-					);
-					if (Number.isFinite(limit) && limit > 0) {
-						const scale = Math.min(1, limit / w, limit / h);
-						w = Math.max(1, Math.round(w * scale));
-						h = Math.max(1, Math.round(h * scale));
+					const srcW = state.srcWidth;
+					const srcH = state.srcHeight;
+					const rW = options?.resizeWidth;
+					const rH = options?.resizeHeight;
+					let w: number;
+					let h: number;
+					if (rW !== undefined && rH !== undefined) {
+						// Spec: stretch-to-fit, no source clamp.
+						w = rW;
+						h = rH;
+					} else if (rW !== undefined) {
+						w = rW;
+						h = Math.max(1, Math.round((srcH * rW) / srcW));
+					} else if (rH !== undefined) {
+						h = rH;
+						w = Math.max(1, Math.round((srcW * rH) / srcH));
+					} else {
+						w = srcW;
+						h = srcH;
 					}
 					return {
 						width: w,
@@ -132,6 +174,34 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 				},
 			),
 		);
+
+		// Fake Image (for probeNaturalDimensions in production
+		// code). jsdom exposes `Image` but does not load blob URLs,
+		// so we stub it with a synthetic implementation that reports
+		// state.srcWidth/Height and fires onload on microtask.
+		class FakeImage {
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			naturalWidth = 0;
+			naturalHeight = 0;
+			private _src = "";
+			get src() {
+				return this._src;
+			}
+			set src(url: string) {
+				this._src = url;
+				queueMicrotask(() => {
+					if (state.decodeThrows) {
+						this.onerror?.();
+						return;
+					}
+					this.naturalWidth = state.srcWidth;
+					this.naturalHeight = state.srcHeight;
+					this.onload?.();
+				});
+			}
+		}
+		vi.stubGlobal("Image", FakeImage);
 
 		// Fake OffscreenCanvas whose convertToBlob returns a blob of
 		// size proportional to (width * height * quality) so the
@@ -145,7 +215,7 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 			}
 			getContext() {
 				// drawImage is called on whatever ctx we return; accept
-				// any args and return nothing — the test isn't
+				// any args and return nothing; the test isn't
 				// inspecting pixel data.
 				return {
 					drawImage: () => undefined,
@@ -173,7 +243,7 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 
 	it("re-encodes an oversized image down to the requested byte budget", async () => {
 		// 4096² pixels × 0.5 bytes/pixel × 0.85 quality ≈ 7.1 MiB
-		// raw — well over budget, forcing at least a few shrink
+		// raw; well over budget, forcing at least a few shrink
 		// iterations before convergence.
 		const file = new File([new Uint8Array(6 * 1024 * 1024)], "big.png", {
 			type: "image/png",
@@ -189,38 +259,97 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 		expect(state.encodeCalls.length).toBeGreaterThan(0);
 	});
 
-	it("passes resizeWidth/resizeHeight to the decoder so the bitmap cannot exceed the clamp", async () => {
-		// Source is far larger than MAX_INITIAL_DIMENSION on both
-		// axes. Without the resizeWidth/Height options the decoder
-		// would allocate a ~60000×40000 bitmap (~9.6 GB RGBA).
+	it("decoder never stretches non-square sources", async () => {
+		// 4:1 panorama with the long axis ABOVE MAX_INITIAL_DIMENSION.
+		// That forces the decoder to engage the resize options: if
+		// decodeToBitmap passes both resizeWidth AND resizeHeight,
+		// the spec guarantees the output is exactly those dims
+		// (8192x8192, 1:1), destroying the source ratio. Passing
+		// only ONE dim (the correct fix) keeps the 4:1 ratio.
+		state.srcWidth = 16_000;
+		state.srcHeight = 4_000; // 4:1, width > 8192 so resize engages
+		const file = new File([new Uint8Array(6 * 1024 * 1024)], "wide.png", {
+			type: "image/png",
+		});
+		await resizeImageToMaxBytes(file, 32 * 1024);
+		expect(state.encodeCalls.length).toBeGreaterThan(0);
+		// The first encode runs at the decoded bitmap's dimensions,
+		// so its ratio must match the source's 4:1 within a pixel of
+		// rounding. If decodeToBitmap regressed to passing both resize
+		// dims, this ratio would be 1:1 and the assertion would fail.
+		const first = state.encodeCalls[0];
+		const ratio = first.width / first.height;
+		expect(ratio).toBeGreaterThanOrEqual(4 - 0.05);
+		expect(ratio).toBeLessThanOrEqual(4 + 0.05);
+		// Both axes stay within the decoder-side clamp.
+		expect(first.width).toBeLessThanOrEqual(8192);
+		expect(first.height).toBeLessThanOrEqual(8192);
+	});
+
+	it("keeps the bitmap within MAX_INITIAL_DIMENSION on both axes for extreme portraits", async () => {
+		// Tall portrait: if the decoder regressed to passing
+		// resizeWidth: MAX unconditionally, a 2000x60000 source
+		// would produce a 8192x245760 bitmap (spec: output width
+		// is exactly resizeWidth, height scales), blowing past
+		// Chromium's ~268M pixel limit. The probe-first decoder
+		// sees height > width, so it passes resizeHeight only,
+		// yielding 273x8192. This test pins that behavior.
+		state.srcWidth = 2000;
+		state.srcHeight = 60_000;
+		const file = new File([new Uint8Array(6 * 1024 * 1024)], "tall.png", {
+			type: "image/png",
+		});
+		await resizeImageToMaxBytes(file, 64 * 1024);
+		// Every encode must be within the 8192² box.
+		for (const call of state.encodeCalls) {
+			expect(call.width).toBeLessThanOrEqual(8192);
+			expect(call.height).toBeLessThanOrEqual(8192);
+		}
+		// Aspect ratio of the first encode must match the source.
+		const first = state.encodeCalls[0];
+		const sourceRatio = 2000 / 60_000;
+		const bitmapRatio = first.width / first.height;
+		// Allow ±1% rounding.
+		expect(bitmapRatio).toBeGreaterThan(sourceRatio * 0.99);
+		expect(bitmapRatio).toBeLessThan(sourceRatio * 1.01);
+	});
+
+	it("stays within MAX_INITIAL_DIMENSION when source exceeds it on both axes", async () => {
+		// Common oversized case: 60000x40000 landscape. Probe reports
+		// width > height > MAX, so the decoder clamps via
+		// resizeWidth: 8192 (producing 8192x5461) in one pass.
 		state.srcWidth = 60_000;
 		state.srcHeight = 40_000;
 		const file = new File([new Uint8Array(6 * 1024 * 1024)], "huge.png", {
 			type: "image/png",
 		});
 		await resizeImageToMaxBytes(file, 256 * 1024);
-		// Every recorded encode must be within the 8192² clamp so we
-		// know the clamp is applied at decode time, not later.
 		for (const call of state.encodeCalls) {
 			expect(call.width).toBeLessThanOrEqual(8192);
 			expect(call.height).toBeLessThanOrEqual(8192);
 		}
 	});
 
-	it("preserves aspect ratio across the shrink loop", async () => {
-		state.srcWidth = 8000;
-		state.srcHeight = 2000; // 4:1 ratio
-		const file = new File([new Uint8Array(6 * 1024 * 1024)], "wide.png", {
+	it("skips createImageBitmap resize options entirely when source is already under clamp", async () => {
+		// 1080p screenshot: natural dimensions are well below
+		// MAX_INITIAL_DIMENSION. Passing resizeWidth: 8192 would
+		// upscale per HTML spec (output width = 8192, height
+		// scales to 4608), wasting ~2x the pixel budget and risking
+		// memory pressure for no benefit. The probe-first decoder
+		// sees a small source and calls createImageBitmap with NO
+		// resize options, getting back the natural dimensions.
+		state.srcWidth = 1920;
+		state.srcHeight = 1080;
+		const file = new File([new Uint8Array(6 * 1024 * 1024)], "shot.png", {
 			type: "image/png",
 		});
-		await resizeImageToMaxBytes(file, 32 * 1024);
-		expect(state.encodeCalls.length).toBeGreaterThan(0);
-		for (const call of state.encodeCalls) {
-			// Allow ±1 px rounding across iterative Math.round calls.
-			const ratio = call.width / call.height;
-			expect(ratio).toBeGreaterThanOrEqual(4 - 0.05);
-			expect(ratio).toBeLessThanOrEqual(4 + 0.05);
-		}
+		await resizeImageToMaxBytes(file, 256 * 1024);
+		// First encode must be at the source dimensions, not
+		// upscaled. If the probe-check regressed, the encode would
+		// be at 8192x4608.
+		const first = state.encodeCalls[0];
+		expect(first.width).toBe(1920);
+		expect(first.height).toBe(1080);
 	});
 
 	it("tries the fallback quality pass when shrink iterations saturate", async () => {
@@ -252,6 +381,56 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 		expect(result).toBeNull();
 	});
 
+	it("fake createImageBitmap matches HTML spec output-dimension rules", async () => {
+		// Pins fake createImageBitmap behavior: stretch with both
+		// dims, proportional scale with one, including upscale
+		// when a resize dim exceeds the source. A fake that capped
+		// at source dimensions or scaled uniformly would mask real
+		// decoder bugs in production code.
+		state.srcWidth = 4000;
+		state.srcHeight = 1000;
+		const blob = new Blob([new Uint8Array(8)], { type: "image/png" });
+		const createBitmap = (
+			globalThis as unknown as {
+				createImageBitmap: (
+					blob: Blob,
+					opts?: { resizeWidth?: number; resizeHeight?: number },
+				) => Promise<ImageBitmap>;
+			}
+		).createImageBitmap;
+
+		// Both dims present: spec says output is exactly those
+		// dims (stretches, no source clamp).
+		const stretched = await createBitmap(blob, {
+			resizeWidth: 800,
+			resizeHeight: 800,
+		});
+		expect(stretched.width).toBe(800);
+		expect(stretched.height).toBe(800);
+
+		// Only resizeWidth (downscale): height scales proportionally.
+		const downWidth = await createBitmap(blob, { resizeWidth: 800 });
+		expect(downWidth.width).toBe(800);
+		expect(downWidth.height).toBe(200); // 1000 * 800/4000
+
+		// Only resizeHeight (downscale): width scales proportionally.
+		const downHeight = await createBitmap(blob, { resizeHeight: 200 });
+		expect(downHeight.height).toBe(200);
+		expect(downHeight.width).toBe(800); // 4000 * 200/1000
+
+		// Only resizeWidth UPSCALE: spec says width is exactly
+		// resizeWidth even past source size; a capped fake would
+		// report (4000, 1000) instead of (8000, 2000).
+		const upWidth = await createBitmap(blob, { resizeWidth: 8000 });
+		expect(upWidth.width).toBe(8000);
+		expect(upWidth.height).toBe(2000); // 1000 * 8000/4000
+
+		// No resize options: source dimensions unchanged.
+		const natural = await createBitmap(blob);
+		expect(natural.width).toBe(4000);
+		expect(natural.height).toBe(1000);
+	});
+
 	it("keeps the File type honest when the encoder falls back to PNG", async () => {
 		// Some browsers without WebP encode support silently return
 		// a PNG. The helper must reflect the actual type on the File
@@ -266,6 +445,21 @@ describe("resizeImageToMaxBytes with stubbed decoders", () => {
 		expect(result.type).toBe("image/png");
 		// Extension should not claim .webp for a PNG payload.
 		expect(result.name.endsWith(".webp")).toBe(false);
+	});
+
+	it("re-encodes an oversized image/jpg through the resize pipeline", async () => {
+		// Over-budget: ensures the image/jpg alias passes the
+		// allowlist gate and enters the encode pipeline. Removing
+		// the alias from RESIZABLE_MIME_TYPES would short-circuit
+		// to null here.
+		const file = new File([new Uint8Array(3 * 1024 * 1024)], "photo.jpg", {
+			type: "image/jpg",
+		});
+		const result = await resizeImageToMaxBytes(file, 512 * 1024);
+		expect(result).not.toBeNull();
+		expect(state.encodeCalls.length).toBeGreaterThan(0);
+		if (!result) return;
+		expect(result.size).toBeLessThanOrEqual(512 * 1024);
 	});
 });
 
