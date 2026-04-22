@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,21 +25,26 @@ import (
 
 	"cdr.dev/slog/v3"
 	"cdr.dev/slog/v3/sloggers/slogjson"
+	"cdr.dev/slog/v3/sloggers/slogtest"
 	agplaiseats "github.com/coder/coder/v2/coderd/aiseats"
 	"github.com/coder/coder/v2/coderd/apikey"
+	"github.com/coder/coder/v2/coderd/coderdtest"
 	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbauthz"
 	"github.com/coder/coder/v2/coderd/database/dbgen"
 	"github.com/coder/coder/v2/coderd/database/dbmock"
 	"github.com/coder/coder/v2/coderd/database/dbtestutil"
 	"github.com/coder/coder/v2/coderd/database/dbtime"
 	"github.com/coder/coder/v2/coderd/externalauth"
 	codermcp "github.com/coder/coder/v2/coderd/mcp"
+	"github.com/coder/coder/v2/coderd/rbac"
 	"github.com/coder/coder/v2/coderd/util/ptr"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/cryptorand"
 	"github.com/coder/coder/v2/enterprise/aibridged"
 	"github.com/coder/coder/v2/enterprise/aibridged/proto"
 	"github.com/coder/coder/v2/enterprise/aibridgedserver"
+	enterpriseaiseats "github.com/coder/coder/v2/enterprise/aiseats"
 	"github.com/coder/coder/v2/testutil"
 	"github.com/coder/serpent"
 )
@@ -789,6 +795,46 @@ func TestRecordInterception(t *testing.T) {
 			},
 		},
 	)
+}
+
+// TestRecordInterceptionRBAC verifies that RecordInterception succeeds
+// through real RBAC (AsAIBridged) and records an AI seat via the real
+// SeatTracker, matching the production call path.
+func TestRecordInterceptionRBAC(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	db := dbmock.NewMockStore(ctrl)
+
+	interceptionID := uuid.New()
+	initiatorID := uuid.New()
+
+	db.EXPECT().Wrappers().Return([]string{}).AnyTimes()
+	db.EXPECT().InsertAIBridgeInterception(gomock.Any(), gomock.Any()).Return(database.AIBridgeInterception{
+		ID:          interceptionID,
+		InitiatorID: initiatorID,
+	}, nil)
+	db.EXPECT().UpsertAISeatState(gomock.Any(), gomock.Any()).Return(true, nil)
+
+	authz := rbac.NewStrictAuthorizer(prometheus.NewRegistry())
+	authzDB := dbauthz.New(db, authz, slogtest.Make(t, nil), coderdtest.AccessControlStorePointer())
+	tracker := enterpriseaiseats.New(authzDB, testutil.Logger(t), nil, nil)
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	srv, err := aibridgedserver.NewServer(ctx, authzDB, testutil.Logger(t), "/", codersdk.AIBridgeConfig{}, nil, requiredExperiments, tracker)
+	require.NoError(t, err)
+
+	_, err = srv.RecordInterception(ctx, &proto.RecordInterceptionRequest{
+		Id:             interceptionID.String(),
+		ApiKeyId:       uuid.NewString(),
+		InitiatorId:    initiatorID.String(),
+		Provider:       "anthropic",
+		ProviderName:   "anthropic",
+		Model:          "claude-4-opus",
+		StartedAt:      timestamppb.Now(),
+		CredentialKind: "byok",
+	})
+	require.NoError(t, err)
 }
 
 func TestRecordInterceptionEnded(t *testing.T) {
