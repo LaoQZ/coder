@@ -11656,6 +11656,238 @@ func TestDeleteChatDebugDataAfterMessageIDIncludesTriggeredRuns(t *testing.T) {
 	require.Equal(t, unaffectedStep.ID, remainingSteps[0].ID)
 }
 
+// TestDeleteChatDebugDataAfterMessageIDAssistantMessageBoundary
+// verifies that DeleteChatDebugDataAfterMessageID correctly uses the
+// step-level assistant_message_id clause. Every run has run-level
+// message IDs at or below the cutoff, so the only way a run can be
+// selected for deletion is through its step-level fields. This
+// isolates the assistant_message_id > @message_id branch from the
+// run-level trigger_message_id and history_tip_message_id paths.
+//
+// If the step.assistant_message_id > @message_id clause were removed
+// from the UNION in DeleteChatDebugDataAfterMessageID, runs A and B
+// would survive, and the test would fail.
+func TestDeleteChatDebugDataAfterMessageIDAssistantMessageBoundary(t *testing.T) {
+	t.Parallel()
+
+	store, _ := dbtestutil.NewDB(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	org := dbgen.Organization(t, store, database.Organization{})
+	user := dbgen.User(t, store, database.User{})
+
+	providerName := "openai"
+	modelName := "debug-model-asst-msg-" + uuid.NewString()
+
+	_, err := store.InsertChatProvider(ctx, database.InsertChatProviderParams{
+		Provider:             providerName,
+		DisplayName:          "Debug Provider",
+		APIKey:               "test-key",
+		Enabled:              true,
+		CentralApiKeyEnabled: true,
+	})
+	require.NoError(t, err)
+
+	modelCfg, err := store.InsertChatModelConfig(ctx, database.InsertChatModelConfigParams{
+		Provider:             providerName,
+		Model:                modelName,
+		DisplayName:          "Debug Model",
+		CreatedBy:            uuid.NullUUID{UUID: user.ID, Valid: true},
+		UpdatedBy:            uuid.NullUUID{UUID: user.ID, Valid: true},
+		Enabled:              true,
+		IsDefault:            true,
+		ContextLimit:         128000,
+		CompressionThreshold: 80,
+		Options:              json.RawMessage(`{}`),
+	})
+	require.NoError(t, err)
+
+	chat, err := store.InsertChat(ctx, database.InsertChatParams{
+		OrganizationID:    org.ID,
+		Status:            database.ChatStatusWaiting,
+		ClientType:        database.ChatClientTypeUi,
+		OwnerID:           user.ID,
+		LastModelConfigID: modelCfg.ID,
+		Title:             "chat-debug-asst-msg-boundary-" + uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	const cutoff int64 = 100
+
+	// insertSafeRun creates a run whose run-level message IDs are
+	// below the cutoff, so the run is invisible to the run-level half
+	// of the UNION. Only step-level fields can cause deletion.
+	insertSafeRun := func(t *testing.T) database.ChatDebugRun {
+		t.Helper()
+		run, runErr := store.InsertChatDebugRun(ctx, database.InsertChatDebugRunParams{
+			ChatID:              chat.ID,
+			ModelConfigID:       uuid.NullUUID{UUID: modelCfg.ID, Valid: true},
+			TriggerMessageID:    sql.NullInt64{Int64: cutoff - 10, Valid: true},
+			HistoryTipMessageID: sql.NullInt64{Int64: cutoff - 10, Valid: true},
+			Kind:                "chat_turn",
+			Status:              "in_progress",
+			Provider:            sql.NullString{String: providerName, Valid: true},
+			Model:               sql.NullString{String: modelName, Valid: true},
+		})
+		require.NoError(t, runErr)
+		return run
+	}
+
+	// Run A: step.assistant_message_id > cutoff, step.history_tip is
+	// NULL. Catchable only via the assistant_message_id clause.
+	runA := insertSafeRun(t)
+	_, err = store.InsertChatDebugStep(ctx, database.InsertChatDebugStepParams{
+		RunID:              runA.ID,
+		ChatID:             chat.ID,
+		StepNumber:         1,
+		Operation:          "stream",
+		Status:             "completed",
+		AssistantMessageID: sql.NullInt64{Int64: cutoff + 5, Valid: true},
+		// HistoryTipMessageID intentionally omitted (NULL).
+	})
+	require.NoError(t, err)
+
+	// Run B: step.assistant_message_id > cutoff, step.history_tip
+	// <= cutoff. The history_tip path does not match, so only the
+	// assistant_message_id clause catches it.
+	runB := insertSafeRun(t)
+	_, err = store.InsertChatDebugStep(ctx, database.InsertChatDebugStepParams{
+		RunID:               runB.ID,
+		ChatID:              chat.ID,
+		StepNumber:          1,
+		Operation:           "stream",
+		Status:              "completed",
+		AssistantMessageID:  sql.NullInt64{Int64: cutoff + 20, Valid: true},
+		HistoryTipMessageID: sql.NullInt64{Int64: cutoff - 3, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Run C: step.assistant_message_id < cutoff, step.history_tip is
+	// NULL. Must survive because the value is below the boundary.
+	runC := insertSafeRun(t)
+	stepC, err := store.InsertChatDebugStep(ctx, database.InsertChatDebugStepParams{
+		RunID:              runC.ID,
+		ChatID:             chat.ID,
+		StepNumber:         1,
+		Operation:          "stream",
+		Status:             "completed",
+		AssistantMessageID: sql.NullInt64{Int64: cutoff - 3, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Run D: step.assistant_message_id = cutoff (exact boundary),
+	// step.history_tip is NULL. Must survive because the query uses
+	// strict greater-than, not greater-than-or-equal.
+	runD := insertSafeRun(t)
+	stepD, err := store.InsertChatDebugStep(ctx, database.InsertChatDebugStepParams{
+		RunID:              runD.ID,
+		ChatID:             chat.ID,
+		StepNumber:         1,
+		Operation:          "stream",
+		Status:             "completed",
+		AssistantMessageID: sql.NullInt64{Int64: cutoff, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Run E: step.assistant_message_id is NULL, step.history_tip >
+	// cutoff. Deleted via the history_tip path, confirming that a
+	// NULL assistant_message_id does not block deletion through the
+	// other branch of the OR.
+	runE := insertSafeRun(t)
+	_, err = store.InsertChatDebugStep(ctx, database.InsertChatDebugStepParams{
+		RunID:               runE.ID,
+		ChatID:              chat.ID,
+		StepNumber:          1,
+		Operation:           "stream",
+		Status:              "completed",
+		HistoryTipMessageID: sql.NullInt64{Int64: cutoff + 2, Valid: true},
+		// AssistantMessageID intentionally omitted (NULL).
+	})
+	require.NoError(t, err)
+
+	// Run F: both step message IDs are NULL. Must survive because
+	// NULL > N evaluates to NULL (not TRUE) in SQL.
+	runF := insertSafeRun(t)
+	stepF, err := store.InsertChatDebugStep(ctx, database.InsertChatDebugStepParams{
+		RunID:      runF.ID,
+		ChatID:     chat.ID,
+		StepNumber: 1,
+		Operation:  "stream",
+		Status:     "completed",
+		// Both message IDs intentionally omitted (NULL).
+	})
+	require.NoError(t, err)
+
+	deletedRows, err := store.DeleteChatDebugDataAfterMessageID(ctx, database.DeleteChatDebugDataAfterMessageIDParams{
+		ChatID:        chat.ID,
+		MessageID:     cutoff,
+		StartedBefore: time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
+	// Runs A, B (assistant_message_id > cutoff) and E (history_tip >
+	// cutoff) are deleted. Runs C, D, F survive.
+	require.EqualValues(t, 3, deletedRows)
+
+	// Verify deleted runs are gone.
+	_, err = store.GetChatDebugRunByID(ctx, runA.ID)
+	require.ErrorIs(t, err, sql.ErrNoRows,
+		"run A: assistant_message_id > cutoff with NULL history_tip must be deleted")
+
+	_, err = store.GetChatDebugRunByID(ctx, runB.ID)
+	require.ErrorIs(t, err, sql.ErrNoRows,
+		"run B: assistant_message_id > cutoff with history_tip <= cutoff must be deleted")
+
+	_, err = store.GetChatDebugRunByID(ctx, runE.ID)
+	require.ErrorIs(t, err, sql.ErrNoRows,
+		"run E: NULL assistant_message_id with history_tip > cutoff must be deleted")
+
+	// Verify cascaded steps are gone for deleted runs.
+	for _, id := range []uuid.UUID{runA.ID, runB.ID, runE.ID} {
+		steps, stepsErr := store.GetChatDebugStepsByRunID(ctx, id)
+		require.NoError(t, stepsErr)
+		require.Empty(t, steps)
+	}
+
+	// Verify surviving runs and their steps.
+	remainingC, err := store.GetChatDebugRunByID(ctx, runC.ID)
+	require.NoError(t, err)
+	require.Equal(t, runC.ID, remainingC.ID,
+		"run C: assistant_message_id < cutoff must survive")
+
+	remainingD, err := store.GetChatDebugRunByID(ctx, runD.ID)
+	require.NoError(t, err)
+	require.Equal(t, runD.ID, remainingD.ID,
+		"run D: assistant_message_id = cutoff (boundary) must survive")
+
+	remainingF, err := store.GetChatDebugRunByID(ctx, runF.ID)
+	require.NoError(t, err)
+	require.Equal(t, runF.ID, remainingF.ID,
+		"run F: both step message IDs NULL must survive")
+
+	stepsC, err := store.GetChatDebugStepsByRunID(ctx, runC.ID)
+	require.NoError(t, err)
+	require.Len(t, stepsC, 1)
+	require.Equal(t, stepC.ID, stepsC[0].ID)
+
+	stepsD, err := store.GetChatDebugStepsByRunID(ctx, runD.ID)
+	require.NoError(t, err)
+	require.Len(t, stepsD, 1)
+	require.Equal(t, stepD.ID, stepsD[0].ID)
+
+	stepsF, err := store.GetChatDebugStepsByRunID(ctx, runF.ID)
+	require.NoError(t, err)
+	require.Len(t, stepsF, 1)
+	require.Equal(t, stepF.ID, stepsF[0].ID)
+
+	// Final count: exactly 3 runs survive.
+	remaining, err := store.GetChatDebugRunsByChatID(ctx, database.GetChatDebugRunsByChatIDParams{
+		ChatID:   chat.ID,
+		LimitVal: 100,
+	})
+	require.NoError(t, err)
+	require.Len(t, remaining, 3, "runs C, D, F must survive")
+}
+
 func TestFinalizeStaleChatDebugRows(t *testing.T) {
 	t.Parallel()
 
