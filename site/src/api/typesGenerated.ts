@@ -816,7 +816,10 @@ export interface AdvisorConfig {
 	readonly max_output_tokens: number;
 	/**
 	 * ModelConfigID selects a specific chat model config to power the
-	 * advisor. uuid.Nil means reuse the outer chat model.
+	 * advisor. uuid.Nil means reuse the outer chat model. The runtime
+	 * must fall back to the outer chat model when this ID cannot be
+	 * resolved (e.g. the referenced model config was soft-deleted or
+	 * its provider was disabled after the admin saved this config).
 	 */
 	readonly model_config_id: string;
 	/**
@@ -7740,8 +7743,9 @@ export interface UpdateActiveTemplateVersion {
 
 // From codersdk/chats.go
 /**
- * UpdateAdvisorConfigRequest is the pinned request body for updating
- * advisor runtime configuration.
+ * UpdateAdvisorConfigRequest is the request body for updating advisor
+ * runtime configuration. It is a type alias for AdvisorConfig because
+ * the request and response shapes are currently identical.
  */
 export interface UpdateAdvisorConfigRequest {
 	/**
@@ -7761,7 +7765,10 @@ export interface UpdateAdvisorConfigRequest {
 	readonly max_output_tokens: number;
 	/**
 	 * ModelConfigID selects a specific chat model config to power the
-	 * advisor. uuid.Nil means reuse the outer chat model.
+	 * advisor. uuid.Nil means reuse the outer chat model. The runtime
+	 * must fall back to the outer chat model when this ID cannot be
+	 * resolved (e.g. the referenced model config was soft-deleted or
+	 * its provider was disabled after the admin saved this config).
 	 */
 	readonly model_config_id: string;
 	/**
