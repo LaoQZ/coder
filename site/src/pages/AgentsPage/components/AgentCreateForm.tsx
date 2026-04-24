@@ -125,6 +125,8 @@ interface AgentCreateFormProps {
 	isModelCatalogLoading: boolean;
 	modelConfigs: readonly TypesGen.ChatModelConfig[];
 	isModelConfigsLoading: boolean;
+	rootPersonalModelOverride?: TypesGen.ChatPersonalModelOverride;
+	isPersonalModelOverridesLoading?: boolean;
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 	onMCPAuthComplete?: (serverId: string) => void;
 	workspaceCount: number | undefined;
@@ -143,6 +145,8 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 	modelConfigs,
 	isModelCatalogLoading,
 	isModelConfigsLoading,
+	rootPersonalModelOverride,
+	isPersonalModelOverridesLoading = false,
 	mcpServers,
 	onMCPAuthComplete,
 	workspaceCount: _workspaceCount,
@@ -177,17 +181,48 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 			? defaultModelConfig.id
 			: "";
 	})();
-	const preferredModelID =
+	const isUsableRootPersonalOverride =
+		rootPersonalModelOverride?.is_set === true &&
+		!rootPersonalModelOverride.is_malformed;
+	const rootOverrideModelID =
+		isUsableRootPersonalOverride &&
+		rootPersonalModelOverride.mode === "model" &&
+		modelOptions.some(
+			(option) => option.id === rootPersonalModelOverride.model_config_id,
+		)
+			? rootPersonalModelOverride.model_config_id
+			: "";
+	const isRootOverrideChatDefault =
+		isUsableRootPersonalOverride &&
+		rootPersonalModelOverride.mode === "chat_default";
+	const rootOverrideDisplayModelID = isRootOverrideChatDefault
+		? defaultModelID || (modelOptions[0]?.id ?? "")
+		: rootOverrideModelID;
+	const fallbackModelID =
 		lastUsedModelID || defaultModelID || (modelOptions[0]?.id ?? "");
+	const preferredModelID = rootOverrideDisplayModelID || fallbackModelID;
 	const [userSelectedModel, setUserSelectedModel] = useState("");
 	const [hasUserSelectedModel, setHasUserSelectedModel] = useState(false);
+	const hasValidUserSelectedModel =
+		hasUserSelectedModel &&
+		modelOptions.some((modelOption) => modelOption.id === userSelectedModel);
 	// Derive the effective model every render so we never reference
 	// a stale model id and can honor fallback precedence.
-	const selectedModel =
-		hasUserSelectedModel &&
-		modelOptions.some((modelOption) => modelOption.id === userSelectedModel)
-			? userSelectedModel
-			: preferredModelID;
+	const selectedModel = hasValidUserSelectedModel
+		? userSelectedModel
+		: preferredModelID;
+	const submittedModel = (() => {
+		if (hasValidUserSelectedModel) {
+			return userSelectedModel;
+		}
+		if (rootOverrideModelID) {
+			return rootOverrideModelID;
+		}
+		if (isRootOverrideChatDefault) {
+			return undefined;
+		}
+		return selectedModel || undefined;
+	})();
 	const initialOrg =
 		organizations.find((o) => o.is_default) ?? organizations[0];
 	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
@@ -316,7 +351,7 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 			message,
 			fileIDs,
 			workspaceId: effectiveWorkspaceId ?? undefined,
-			model: selectedModel || undefined,
+			model: submittedModel,
 			organizationId,
 			mcpServerIds:
 				effectiveMCPServerIds.length > 0
@@ -460,7 +495,9 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 					<AgentChatInput
 						onSend={handleSendWithAttachments}
 						placeholder="Ask Coder to build, fix bugs, or explore your project..."
-						isDisabled={isCreating || isForbidden}
+						isDisabled={
+							isCreating || isForbidden || isPersonalModelOverridesLoading
+						}
 						isLoading={isCreating}
 						initialValue={initialInputValue}
 						initialEditorState={initialEditorState}
