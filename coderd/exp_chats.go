@@ -3878,7 +3878,7 @@ func (api *API) validateCreateChatWorkspaceSelection(
 
 func (api *API) resolveCreateChatModelConfigID(
 	ctx context.Context,
-	ownerID uuid.UUID,
+	userID uuid.UUID,
 	req codersdk.CreateChatRequest,
 ) (uuid.UUID, int, *codersdk.Response) {
 	if req.ModelConfigID != nil {
@@ -3902,7 +3902,7 @@ func (api *API) resolveCreateChatModelConfigID(
 	}
 
 	raw, err := api.Database.GetUserChatPersonalModelOverride(ctx, database.GetUserChatPersonalModelOverrideParams{
-		UserID: ownerID,
+		UserID: userID,
 		Key:    chatPersonalModelOverrideKey(codersdk.ChatPersonalModelOverrideContextRoot),
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -3920,12 +3920,12 @@ func (api *API) resolveCreateChatModelConfigID(
 			api.Logger.Debug(
 				ctx,
 				"malformed personal root model override, using default model",
-				slog.F("user_id", ownerID),
+				slog.F("user_id", userID),
 			)
 		} else if mode == codersdk.ChatPersonalModelOverrideModeModel {
 			modelID, parseErr := uuid.Parse(modelConfigID)
 			if parseErr == nil {
-				available, err := api.userCanUseChatModelConfig(ctx, ownerID, modelID)
+				available, err := api.userCanUseChatModelConfig(ctx, userID, modelID)
 				if err != nil {
 					return uuid.Nil, http.StatusInternalServerError, &codersdk.Response{
 						Message: "Failed to resolve chat model config.",
@@ -3939,7 +3939,7 @@ func (api *API) resolveCreateChatModelConfigID(
 			api.Logger.Debug(
 				ctx,
 				"personal root model override is unavailable, using default model",
-				slog.F("user_id", ownerID),
+				slog.F("user_id", userID),
 				slog.F("model_config_id", modelConfigID),
 			)
 		}

@@ -10790,11 +10790,14 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
+				rawBefore := getRaw(codersdk.ChatPersonalModelOverrideContextGeneral)
 				err := tc.client.UpdateUserChatPersonalModelOverride(ctx, codersdk.ChatPersonalModelOverrideContextGeneral, codersdk.UpdateUserChatPersonalModelOverrideRequest{
 					Mode:          codersdk.ChatPersonalModelOverrideModeModel,
 					ModelConfigID: tc.modelConfigID,
 				})
 				requireSDKError(t, err, http.StatusBadRequest)
+				rawAfter := getRaw(codersdk.ChatPersonalModelOverrideContextGeneral)
+				require.Equal(t, rawBefore, rawAfter)
 			})
 		}
 	})
