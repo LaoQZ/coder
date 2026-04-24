@@ -35,6 +35,25 @@ export const FeatureDisabled: Story = {
 	},
 };
 
+export const LoadingState: Story = {
+	args: {
+		adminSettings: undefined,
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		expect(
+			await canvas.findByText("Loading personal model override settings..."),
+		).toBeInTheDocument();
+		expect(
+			canvas.getByRole("switch", {
+				name: "Enable users to define their personal overrides",
+			}),
+		).toBeDisabled();
+		expect(canvas.getByRole("button", { name: "Save" })).toBeDisabled();
+	},
+};
+
 export const FeatureEnabled: Story = {
 	args: {
 		adminSettings: { allow_users: true },

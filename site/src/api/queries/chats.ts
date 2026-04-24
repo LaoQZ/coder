@@ -1334,11 +1334,11 @@ export const updateChatPersonalModelOverridesAdminSettings = (
 		req: TypesGen.UpdateChatPersonalModelOverridesAdminSettingsRequest,
 	) => API.experimental.updateChatPersonalModelOverridesAdminSettings(req),
 	onSuccess: async () => {
-		// When the user settings page and sidebar user tab are wired up,
-		// also invalidate the user personal overrides query and sidebar
-		// visibility query that depend on this deployment flag.
 		await queryClient.invalidateQueries({
 			queryKey: chatPersonalModelOverridesAdminSettingsKey,
+		});
+		await queryClient.invalidateQueries({
+			queryKey: userChatPersonalModelOverridesKey,
 		});
 	},
 });
