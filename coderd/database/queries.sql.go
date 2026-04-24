@@ -26402,12 +26402,12 @@ func (q *sqlQuerier) UpsertUserChatDebugLoggingEnabled(ctx context.Context, arg 
 
 const upsertUserChatPersonalModelOverride = `-- name: UpsertUserChatPersonalModelOverride :exec
 INSERT INTO user_configs (user_id, key, value)
-SELECT $1, $2, $3
+SELECT $1::uuid, $2::text, $3::text
 WHERE $2::text LIKE 'chat\_personal\_model\_override:%'
 ON CONFLICT ON CONSTRAINT user_configs_pkey
-DO UPDATE SET value = $3
-WHERE user_configs.user_id = $1
-	AND user_configs.key = $2
+DO UPDATE SET value = $3::text
+WHERE user_configs.user_id = $1::uuid
+	AND user_configs.key = $2::text
 	AND user_configs.key LIKE 'chat\_personal\_model\_override:%'
 `
 
