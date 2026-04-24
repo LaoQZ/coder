@@ -491,7 +491,7 @@ func upsertInternalUserChatPersonalModelOverride(
 			systemRestrictedTestContext(t),
 			database.UpsertUserChatPersonalModelOverrideParams{
 				UserID: userID,
-				Key:    chatPersonalModelOverrideKey(overrideContext),
+				Key:    ChatPersonalModelOverrideKey(overrideContext),
 				Value:  raw,
 			},
 		),

@@ -10665,7 +10665,7 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		t.Helper()
 		err := db.UpsertUserChatPersonalModelOverride(dbauthz.AsSystemRestricted(ctx), database.UpsertUserChatPersonalModelOverrideParams{
 			UserID: member.ID,
-			Key:    "chat_personal_model_override:" + string(overrideContext),
+			Key:    chatd.ChatPersonalModelOverrideKey(overrideContext),
 			Value:  value,
 		})
 		require.NoError(t, err)
@@ -10674,7 +10674,7 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		t.Helper()
 		raw, err := db.GetUserChatPersonalModelOverride(dbauthz.AsSystemRestricted(ctx), database.GetUserChatPersonalModelOverrideParams{
 			UserID: userID,
-			Key:    "chat_personal_model_override:" + string(overrideContext),
+			Key:    chatd.ChatPersonalModelOverrideKey(overrideContext),
 		})
 		if stderrors.Is(err, sql.ErrNoRows) {
 			return ""
@@ -10815,25 +10815,28 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 				wantMessageSubstring: "Invalid model_config_id",
 			},
 			{
-				name:                 "Unknown",
-				client:               memberClient,
-				userID:               member.ID,
-				modelConfigID:        uuid.NewString(),
-				wantMessageSubstring: "Invalid model_config_id",
+				name:          "Unknown",
+				client:        memberClient,
+				userID:        member.ID,
+				modelConfigID: uuid.NewString(),
+				wantMessageSubstring: "Invalid model_config_id: model config " +
+					"not found or disabled.",
 			},
 			{
-				name:                 "Disabled",
-				client:               memberClient,
-				userID:               member.ID,
-				modelConfigID:        disabledModelConfig.ID.String(),
-				wantMessageSubstring: "Invalid model_config_id",
+				name:          "Disabled",
+				client:        memberClient,
+				userID:        member.ID,
+				modelConfigID: disabledModelConfig.ID.String(),
+				wantMessageSubstring: "Invalid model_config_id: model config " +
+					"not found or disabled.",
 			},
 			{
-				name:                 "CredentialUnavailable",
-				client:               noKeyClient,
-				userID:               noKeyUser.ID,
-				modelConfigID:        modelConfig.ID.String(),
-				wantMessageSubstring: "Invalid model_config_id",
+				name:          "CredentialUnavailable",
+				client:        noKeyClient,
+				userID:        noKeyUser.ID,
+				modelConfigID: modelConfig.ID.String(),
+				wantMessageSubstring: "Invalid model_config_id: provider " +
+					"credentials unavailable for this model.",
 			},
 		}
 		for _, tc := range cases {
@@ -10853,6 +10856,17 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 
 	t.Run("GETMalformedStoredValueFallsBackToContextDefault", func(t *testing.T) {
 		upsertRaw(codersdk.ChatPersonalModelOverrideContextRoot, "model:not-a-uuid")
+
+		resp, err := memberClient.GetUserChatPersonalModelOverrides(ctx)
+		require.NoError(t, err)
+		assertOverride(resp, codersdk.ChatPersonalModelOverrideContextRoot, codersdk.ChatPersonalModelOverrideModeChatDefault, "", true, true)
+	})
+
+	t.Run("GETRootDeploymentDefaultIsMalformed", func(t *testing.T) {
+		upsertRaw(
+			codersdk.ChatPersonalModelOverrideContextRoot,
+			string(codersdk.ChatPersonalModelOverrideModeDeploymentDefault),
+		)
 
 		resp, err := memberClient.GetUserChatPersonalModelOverrides(ctx)
 		require.NoError(t, err)
@@ -10913,7 +10927,7 @@ func TestCreateChatPersonalModelOverrideRoot(t *testing.T) {
 		t.Helper()
 		err := db.UpsertUserChatPersonalModelOverride(dbauthz.AsSystemRestricted(ctx), database.UpsertUserChatPersonalModelOverrideParams{
 			UserID: userID,
-			Key:    "chat_personal_model_override:root",
+			Key:    chatd.ChatPersonalModelOverrideKey(codersdk.ChatPersonalModelOverrideContextRoot),
 			Value:  value,
 		})
 		require.NoError(t, err)

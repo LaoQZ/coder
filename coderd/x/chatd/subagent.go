@@ -134,14 +134,6 @@ func readSubagentModelOverride(
 	}
 }
 
-const chatPersonalModelOverrideKeyPrefix = "chat_personal_model_override:"
-
-type parsedSubagentPersonalModelOverride struct {
-	mode          codersdk.ChatPersonalModelOverrideMode
-	modelConfigID uuid.UUID
-	malformed     bool
-}
-
 func personalModelOverrideContextForSubagent(
 	overrideContext codersdk.ChatAgentModelOverrideContext,
 ) (codersdk.ChatPersonalModelOverrideContext, error) {
@@ -155,48 +147,6 @@ func personalModelOverrideContextForSubagent(
 			"unknown subagent model override context %q",
 			overrideContext,
 		)
-	}
-}
-
-func chatPersonalModelOverrideKey(
-	overrideContext codersdk.ChatPersonalModelOverrideContext,
-) string {
-	return chatPersonalModelOverrideKeyPrefix + string(overrideContext)
-}
-
-func parseSubagentPersonalModelOverride(
-	raw string,
-) parsedSubagentPersonalModelOverride {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" ||
-		trimmed == string(codersdk.ChatPersonalModelOverrideModeDeploymentDefault) {
-		return parsedSubagentPersonalModelOverride{
-			mode: codersdk.ChatPersonalModelOverrideModeDeploymentDefault,
-		}
-	}
-	if trimmed == string(codersdk.ChatPersonalModelOverrideModeChatDefault) {
-		return parsedSubagentPersonalModelOverride{
-			mode: codersdk.ChatPersonalModelOverrideModeChatDefault,
-		}
-	}
-
-	mode, rawModelConfigID, ok := strings.Cut(trimmed, ":")
-	if !ok || mode != string(codersdk.ChatPersonalModelOverrideModeModel) {
-		return parsedSubagentPersonalModelOverride{
-			mode:      codersdk.ChatPersonalModelOverrideModeDeploymentDefault,
-			malformed: true,
-		}
-	}
-	modelConfigID, err := uuid.Parse(strings.TrimSpace(rawModelConfigID))
-	if err != nil {
-		return parsedSubagentPersonalModelOverride{
-			mode:      codersdk.ChatPersonalModelOverrideModeDeploymentDefault,
-			malformed: true,
-		}
-	}
-	return parsedSubagentPersonalModelOverride{
-		mode:          codersdk.ChatPersonalModelOverrideModeModel,
-		modelConfigID: modelConfigID,
 	}
 }
 
@@ -231,6 +181,15 @@ func enabledProviderContainsName(
 		}
 	}
 	return false
+}
+
+func userCanUseProviderKeys(
+	providerKeys chatprovider.ProviderAPIKeys,
+	providerName string,
+) bool {
+	return providerKeys.APIKey(providerName) != "" ||
+		(chatprovider.ProviderAllowsAmbientCredentials(providerName) &&
+			providerKeys.HasProvider(providerName))
 }
 
 func (p *Server) resolveConfiguredModelOverride(
@@ -291,9 +250,7 @@ func (p *Server) resolveConfiguredModelOverride(
 			err,
 		)
 	}
-	if providerKeys.APIKey(providerName) == "" &&
-		!(chatprovider.ProviderAllowsAmbientCredentials(providerName) &&
-			providerKeys.HasProvider(providerName)) {
+	if !userCanUseProviderKeys(providerKeys, providerName) {
 		p.logger.Info(ctx,
 			"model override credentials are unavailable, ignoring",
 			slog.F("override_context", overrideContext),
@@ -318,7 +275,7 @@ func (p *Server) resolvePersonalSubagentModelConfigID(
 		ctx,
 		database.GetUserChatPersonalModelOverrideParams{
 			UserID: ownerID,
-			Key:    chatPersonalModelOverrideKey(personalContext),
+			Key:    ChatPersonalModelOverrideKey(personalContext),
 		},
 	)
 	if err != nil {
@@ -332,8 +289,11 @@ func (p *Server) resolvePersonalSubagentModelConfigID(
 		raw = ""
 	}
 
-	parsed := parseSubagentPersonalModelOverride(raw)
-	if parsed.malformed {
+	parsed := ParseChatPersonalModelOverride(
+		raw,
+		codersdk.ChatPersonalModelOverrideModeDeploymentDefault,
+	)
+	if parsed.Malformed {
 		p.logger.Debug(ctx,
 			"personal model override is malformed, using deployment default",
 			slog.F("override_context", overrideContext),
@@ -341,7 +301,7 @@ func (p *Server) resolvePersonalSubagentModelConfigID(
 			slog.F("raw_model_config_id", strings.TrimSpace(raw)),
 		)
 	}
-	switch parsed.mode {
+	switch parsed.Mode {
 	case codersdk.ChatPersonalModelOverrideModeChatDefault:
 		return uuid.Nil, true, nil
 	case codersdk.ChatPersonalModelOverrideModeModel:
@@ -349,7 +309,7 @@ func (p *Server) resolvePersonalSubagentModelConfigID(
 			ctx,
 			overrideContext,
 			ownerID,
-			parsed.modelConfigID,
+			parsed.ModelConfigID,
 		)
 		if err != nil {
 			return uuid.Nil, false, err
@@ -407,9 +367,7 @@ func (p *Server) resolvePersonalModelOverride(
 			err,
 		)
 	}
-	if providerKeys.APIKey(providerName) == "" &&
-		!(chatprovider.ProviderAllowsAmbientCredentials(providerName) &&
-			providerKeys.HasProvider(providerName)) {
+	if !userCanUseProviderKeys(providerKeys, providerName) {
 		p.logger.Debug(ctx,
 			"personal model override credentials are unavailable, using deployment default",
 			slog.F("override_context", overrideContext),
