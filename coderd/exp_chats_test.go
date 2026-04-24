@@ -10592,6 +10592,9 @@ func TestChatPersonalModelOverridesAdminSettings(t *testing.T) {
 		AllowUsers: true,
 	})
 	requireSDKError(t, err, http.StatusForbidden)
+
+	_, err = memberClient.GetChatPersonalModelOverridesAdminSettings(ctx)
+	requireSDKError(t, err, http.StatusNotFound)
 }
 
 //nolint:tparallel,paralleltest // Subtests share coderdtest instances.
@@ -10603,7 +10606,7 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 	firstUser := coderdtest.CreateFirstUser(t, adminClient.Client)
 	memberClientRaw, member := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
 	memberClient := codersdk.NewExperimentalClient(memberClientRaw)
-	noKeyClientRaw, _ := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
+	noKeyClientRaw, noKeyUser := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
 	noKeyClient := codersdk.NewExperimentalClient(noKeyClientRaw)
 
 	_ = createChatModelConfig(t, adminClient)
@@ -10667,14 +10670,21 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	getRaw := func(overrideContext codersdk.ChatPersonalModelOverrideContext) string {
+	getRawFor := func(userID uuid.UUID, overrideContext codersdk.ChatPersonalModelOverrideContext) string {
 		t.Helper()
 		raw, err := db.GetUserChatPersonalModelOverride(dbauthz.AsSystemRestricted(ctx), database.GetUserChatPersonalModelOverrideParams{
-			UserID: member.ID,
+			UserID: userID,
 			Key:    "chat_personal_model_override:" + string(overrideContext),
 		})
+		if stderrors.Is(err, sql.ErrNoRows) {
+			return ""
+		}
 		require.NoError(t, err)
 		return raw
+	}
+	getRaw := func(overrideContext codersdk.ChatPersonalModelOverrideContext) string {
+		t.Helper()
+		return getRawFor(member.ID, overrideContext)
 	}
 
 	t.Run("GETDisabledReturnsMissingDefaults", func(t *testing.T) {
@@ -10777,26 +10787,65 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 
 	t.Run("PUTModelRejectsInvalidModels", func(t *testing.T) {
 		cases := []struct {
-			name          string
-			client        *codersdk.ExperimentalClient
-			modelConfigID string
+			name                 string
+			client               *codersdk.ExperimentalClient
+			userID               uuid.UUID
+			modelConfigID        string
+			wantMessageSubstring string
 		}{
-			{name: "Nil", client: memberClient, modelConfigID: uuid.Nil.String()},
-			{name: "Empty", client: memberClient, modelConfigID: ""},
-			{name: "Malformed", client: memberClient, modelConfigID: "not-a-uuid"},
-			{name: "Unknown", client: memberClient, modelConfigID: uuid.NewString()},
-			{name: "Disabled", client: memberClient, modelConfigID: disabledModelConfig.ID.String()},
-			{name: "CredentialUnavailable", client: noKeyClient, modelConfigID: modelConfig.ID.String()},
+			{
+				name:                 "Nil",
+				client:               memberClient,
+				userID:               member.ID,
+				modelConfigID:        uuid.Nil.String(),
+				wantMessageSubstring: "Invalid model_config_id",
+			},
+			{
+				name:                 "Empty",
+				client:               memberClient,
+				userID:               member.ID,
+				modelConfigID:        "",
+				wantMessageSubstring: "model_config_id is required",
+			},
+			{
+				name:                 "Malformed",
+				client:               memberClient,
+				userID:               member.ID,
+				modelConfigID:        "not-a-uuid",
+				wantMessageSubstring: "Invalid model_config_id",
+			},
+			{
+				name:                 "Unknown",
+				client:               memberClient,
+				userID:               member.ID,
+				modelConfigID:        uuid.NewString(),
+				wantMessageSubstring: "Invalid model_config_id",
+			},
+			{
+				name:                 "Disabled",
+				client:               memberClient,
+				userID:               member.ID,
+				modelConfigID:        disabledModelConfig.ID.String(),
+				wantMessageSubstring: "Invalid model_config_id",
+			},
+			{
+				name:                 "CredentialUnavailable",
+				client:               noKeyClient,
+				userID:               noKeyUser.ID,
+				modelConfigID:        modelConfig.ID.String(),
+				wantMessageSubstring: "Invalid model_config_id",
+			},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				rawBefore := getRaw(codersdk.ChatPersonalModelOverrideContextGeneral)
+				rawBefore := getRawFor(tc.userID, codersdk.ChatPersonalModelOverrideContextGeneral)
 				err := tc.client.UpdateUserChatPersonalModelOverride(ctx, codersdk.ChatPersonalModelOverrideContextGeneral, codersdk.UpdateUserChatPersonalModelOverrideRequest{
 					Mode:          codersdk.ChatPersonalModelOverrideModeModel,
 					ModelConfigID: tc.modelConfigID,
 				})
-				requireSDKError(t, err, http.StatusBadRequest)
-				rawAfter := getRaw(codersdk.ChatPersonalModelOverrideContextGeneral)
+				sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+				require.Contains(t, sdkErr.Message, tc.wantMessageSubstring)
+				rawAfter := getRawFor(tc.userID, codersdk.ChatPersonalModelOverrideContextGeneral)
 				require.Equal(t, rawBefore, rawAfter)
 			})
 		}
@@ -10906,6 +10955,12 @@ func TestCreateChatPersonalModelOverrideRoot(t *testing.T) {
 		require.NoError(t, err)
 
 		chat := createChat(adminClient, "chat default uses default", nil)
+		require.Equal(t, defaultModel.ID, chat.LastModelConfigID)
+	})
+
+	t.Run("MalformedRootFallsBackToDefault", func(t *testing.T) {
+		upsertRootRaw(firstUser.UserID, "garbage")
+		chat := createChat(adminClient, "malformed root falls back", nil)
 		require.Equal(t, defaultModel.ID, chat.LastModelConfigID)
 	})
 
