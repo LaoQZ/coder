@@ -73,11 +73,11 @@ export interface AgentSettingsUserAgentsPageViewProps {
 }
 
 const modeSelectionValue = (mode: PersonalOverrideMode): ModeSelectionValue => {
-	return `mode:${mode}`;
+	return `mode:${mode}` as const;
 };
 
 const modelSelectionValue = (modelConfigID: string): ModelSelectionValue => {
-	return `model:${modelConfigID}`;
+	return `model:${modelConfigID}` as const;
 };
 
 const toSelectionValue = (
