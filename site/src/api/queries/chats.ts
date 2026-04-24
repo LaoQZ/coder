@@ -1425,6 +1425,34 @@ export const updateUserChatCustomPrompt = (queryClient: QueryClient) => ({
 	},
 });
 
+const userChatPersonalModelOverridesKey = [
+	...chatsKey,
+	"user-personal-model-overrides",
+] as const;
+
+export const userChatPersonalModelOverrides = () => ({
+	queryKey: userChatPersonalModelOverridesKey,
+	queryFn: (): Promise<TypesGen.UserChatPersonalModelOverridesResponse> =>
+		API.experimental.getUserChatPersonalModelOverrides(),
+});
+
+type UpdateUserChatPersonalModelOverrideArgs = {
+	context: TypesGen.ChatPersonalModelOverrideContext;
+	req: TypesGen.UpdateUserChatPersonalModelOverrideRequest;
+};
+
+export const updateUserChatPersonalModelOverride = (
+	queryClient: QueryClient,
+) => ({
+	mutationFn: ({ context, req }: UpdateUserChatPersonalModelOverrideArgs) =>
+		API.experimental.updateUserChatPersonalModelOverride(context, req),
+	onSuccess: async () => {
+		await queryClient.invalidateQueries({
+			queryKey: userChatPersonalModelOverridesKey,
+		});
+	},
+});
+
 const userCompactionThresholdsKey = [
 	"chat-user-compaction-thresholds",
 ] as const;

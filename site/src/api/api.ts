@@ -3328,6 +3328,25 @@ class ExperimentalApiMethods {
 		);
 	};
 
+	getUserChatPersonalModelOverrides =
+		async (): Promise<TypesGen.UserChatPersonalModelOverridesResponse> => {
+			const response =
+				await this.axios.get<TypesGen.UserChatPersonalModelOverridesResponse>(
+					"/api/experimental/chats/config/user-personal-model-overrides",
+				);
+			return response.data;
+		};
+
+	updateUserChatPersonalModelOverride = async (
+		context: TypesGen.ChatPersonalModelOverrideContext,
+		req: TypesGen.UpdateUserChatPersonalModelOverrideRequest,
+	): Promise<void> => {
+		await this.axios.put(
+			`/api/experimental/chats/config/user-personal-model-overrides/${encodeURIComponent(context)}`,
+			req,
+		);
+	};
+
 	getChatDebugRuns = async (
 		chatId: string,
 	): Promise<TypesGen.ChatDebugRunSummary[]> => {
