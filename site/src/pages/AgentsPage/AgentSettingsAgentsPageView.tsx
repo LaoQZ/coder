@@ -1,5 +1,9 @@
 import type { FC } from "react";
 import type * as TypesGen from "#/api/typesGenerated";
+import {
+	AdminPersonalModelOverridesSettings,
+	type SavePersonalModelOverridesAdminSetting,
+} from "./components/AdminPersonalModelOverridesSettings";
 import { SectionHeader } from "./components/SectionHeader";
 import {
 	type MutationCallbacks,
@@ -12,6 +16,10 @@ type SaveModelOverride = (
 ) => void;
 
 export interface AgentSettingsAgentsPageViewProps {
+	personalModelOverridesAdminSettingsData?: TypesGen.ChatPersonalModelOverridesAdminSettings;
+	onSavePersonalModelOverridesAdminSettings: SavePersonalModelOverridesAdminSetting;
+	isSavingPersonalModelOverridesAdminSettings: boolean;
+	isSavePersonalModelOverridesAdminSettingsError: boolean;
 	generalModelOverrideData?: TypesGen.ChatAgentModelOverrideResponse;
 	exploreModelOverrideData?: TypesGen.ChatAgentModelOverrideResponse;
 	modelConfigsData: TypesGen.ChatModelConfig[] | undefined;
@@ -28,6 +36,10 @@ export interface AgentSettingsAgentsPageViewProps {
 export const AgentSettingsAgentsPageView: FC<
 	AgentSettingsAgentsPageViewProps
 > = ({
+	personalModelOverridesAdminSettingsData,
+	onSavePersonalModelOverridesAdminSettings,
+	isSavingPersonalModelOverridesAdminSettings,
+	isSavePersonalModelOverridesAdminSettingsError,
 	generalModelOverrideData,
 	exploreModelOverrideData,
 	modelConfigsData,
@@ -54,6 +66,12 @@ export const AgentSettingsAgentsPageView: FC<
 			<SectionHeader
 				label="Agents"
 				description="Configure defaults for delegated agents and other agent-specific capabilities."
+			/>
+			<AdminPersonalModelOverridesSettings
+				adminSettings={personalModelOverridesAdminSettingsData}
+				onSaveAdminSetting={onSavePersonalModelOverridesAdminSettings}
+				isSavingAdminSetting={isSavingPersonalModelOverridesAdminSettings}
+				isSaveAdminSettingError={isSavePersonalModelOverridesAdminSettingsError}
 			/>
 			{showGeneralModelSection && onSaveGeneralModelOverride && (
 				<section aria-label="General model" className="flex flex-col gap-3">

@@ -1317,6 +1317,32 @@ export const updateChatDesktopEnabled = (queryClient: QueryClient) => ({
 	},
 });
 
+const chatPersonalModelOverridesAdminSettingsKey = [
+	...chatsKey,
+	"personalModelOverridesAdminSettings",
+] as const;
+
+export const chatPersonalModelOverridesAdminSettings = () => ({
+	queryKey: chatPersonalModelOverridesAdminSettingsKey,
+	queryFn: () => API.experimental.getChatPersonalModelOverridesAdminSettings(),
+});
+
+export const updateChatPersonalModelOverridesAdminSettings = (
+	queryClient: QueryClient,
+) => ({
+	mutationFn: (
+		req: TypesGen.UpdateChatPersonalModelOverridesAdminSettingsRequest,
+	) => API.experimental.updateChatPersonalModelOverridesAdminSettings(req),
+	onSuccess: async () => {
+		// When the user settings page and sidebar user tab are wired up,
+		// also invalidate the user personal overrides query and sidebar
+		// visibility query that depend on this deployment flag.
+		await queryClient.invalidateQueries({
+			queryKey: chatPersonalModelOverridesAdminSettingsKey,
+		});
+	},
+});
+
 export * from "./chatDebugLogging";
 
 const chatWorkspaceTTLKey = ["chat-workspace-ttl"] as const;

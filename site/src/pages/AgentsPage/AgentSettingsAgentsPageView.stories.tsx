@@ -85,6 +85,10 @@ const allModelConfigs: TypesGen.ChatModelConfig[] = [
 const makeArgs = (
 	overrides: Partial<AgentSettingsAgentsPageViewProps> = {},
 ): AgentSettingsAgentsPageViewProps => ({
+	personalModelOverridesAdminSettingsData: { allow_users: false },
+	onSavePersonalModelOverridesAdminSettings: fn(),
+	isSavingPersonalModelOverridesAdminSettings: false,
+	isSavePersonalModelOverridesAdminSettingsError: false,
 	generalModelOverrideData: buildOverrideData("general"),
 	exploreModelOverrideData: buildOverrideData("explore"),
 	modelConfigsData: allModelConfigs,
@@ -145,6 +149,7 @@ export const AllOverridesUnset: Story = {
 
 		const headings = await canvas.findAllByRole("heading", { level: 3 });
 		expect(headings.map((heading) => heading.textContent?.trim())).toEqual([
+			"Enable users to define their personal overrides",
 			"General model",
 			"Explore subagent model",
 		]);
@@ -158,6 +163,34 @@ export const AllOverridesUnset: Story = {
 				within(section).getByRole("button", { name: "Save" }),
 			).toBeDisabled();
 		}
+	},
+};
+
+export const PersonalOverridesDisabled: Story = {
+	args: makeArgs({
+		personalModelOverridesAdminSettingsData: { allow_users: false },
+	}),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const toggle = await canvas.findByRole("switch", {
+			name: "Enable users to define their personal overrides",
+		});
+
+		expect(toggle).not.toBeChecked();
+	},
+};
+
+export const PersonalOverridesEnabled: Story = {
+	args: makeArgs({
+		personalModelOverridesAdminSettingsData: { allow_users: true },
+	}),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const toggle = await canvas.findByRole("switch", {
+			name: "Enable users to define their personal overrides",
+		});
+
+		expect(toggle).toBeChecked();
 	},
 };
 

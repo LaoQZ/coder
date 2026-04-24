@@ -156,6 +156,10 @@ const fixedNow = dayjs("2026-03-12T12:00:00");
 
 const AgentsRouteElement = () => (
 	<AgentSettingsAgentsPageView
+		personalModelOverridesAdminSettingsData={{ allow_users: false }}
+		onSavePersonalModelOverridesAdminSettings={fn()}
+		isSavingPersonalModelOverridesAdminSettings={false}
+		isSavePersonalModelOverridesAdminSettingsError={false}
 		exploreModelOverrideData={{
 			context: "explore",
 			model_config_id: "",
