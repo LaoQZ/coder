@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -597,12 +598,8 @@ var chatPersonalModelOverrideContexts = []codersdk.ChatPersonalModelOverrideCont
 }
 
 func parseChatPersonalModelOverrideContext(raw string) (codersdk.ChatPersonalModelOverrideContext, bool) {
-	for _, overrideContext := range chatPersonalModelOverrideContexts {
-		if raw == string(overrideContext) {
-			return overrideContext, true
-		}
-	}
-	return "", false
+	c := codersdk.ChatPersonalModelOverrideContext(raw)
+	return c, slices.Contains(chatPersonalModelOverrideContexts, c)
 }
 
 func chatPersonalModelOverrideContextsJoined() string {
@@ -689,11 +686,11 @@ func chatPersonalModelOverrideResponse(
 }
 
 type userChatModelAvailability struct {
-	configuredProviders []chatprovider.ConfiguredProvider
-	configuredModels    []chatprovider.ConfiguredModel
-	enabledModels       []database.ChatModelConfig
-	providerStatus      map[string]chatprovider.ProviderAvailability
-	enabledProviders    map[string]struct{}
+	configuredProviders  []chatprovider.ConfiguredProvider
+	configuredModels     []chatprovider.ConfiguredModel
+	enabledModels        []database.ChatModelConfig
+	providerStatus       map[string]chatprovider.ProviderAvailability
+	enabledProviderNames map[string]struct{}
 }
 
 // getUserChatProviderAvailability returns chat provider availability for a
@@ -720,10 +717,10 @@ func (api *API) getUserChatProviderAvailability(
 	}
 
 	availability := userChatModelAvailability{
-		configuredProviders: make([]chatprovider.ConfiguredProvider, 0, len(enabledProviders)),
-		configuredModels:    make([]chatprovider.ConfiguredModel, 0, len(enabledModels)),
-		enabledModels:       enabledModels,
-		enabledProviders:    make(map[string]struct{}, len(enabledProviders)),
+		configuredProviders:  make([]chatprovider.ConfiguredProvider, 0, len(enabledProviders)),
+		configuredModels:     make([]chatprovider.ConfiguredModel, 0, len(enabledModels)),
+		enabledModels:        enabledModels,
+		enabledProviderNames: make(map[string]struct{}, len(enabledProviders)),
 	}
 	for _, provider := range enabledProviders {
 		availability.configuredProviders = append(
@@ -740,7 +737,7 @@ func (api *API) getUserChatProviderAvailability(
 		)
 		normalizedProvider := chatprovider.NormalizeProvider(provider.Provider)
 		if normalizedProvider != "" {
-			availability.enabledProviders[normalizedProvider] = struct{}{}
+			availability.enabledProviderNames[normalizedProvider] = struct{}{}
 		}
 	}
 	for _, model := range enabledModels {
@@ -791,7 +788,7 @@ func (api *API) userCanUseChatModelConfig(
 		if err != nil {
 			return false, nil
 		}
-		if _, ok := availability.enabledProviders[provider]; !ok {
+		if _, ok := availability.enabledProviderNames[provider]; !ok {
 			return false, nil
 		}
 		providerStatus, ok := availability.providerStatus[provider]
@@ -1127,13 +1124,13 @@ func (api *API) listChatModels(rw http.ResponseWriter, r *http.Request) {
 		availability.configuredProviders,
 		availability.configuredModels,
 		availability.providerStatus,
-		availability.enabledProviders,
+		availability.enabledProviderNames,
 	); ok {
 		response = configured
 	} else {
 		response = catalog.ListConfiguredProviderAvailability(
 			availability.providerStatus,
-			availability.enabledProviders,
+			availability.enabledProviderNames,
 		)
 	}
 
@@ -3919,7 +3916,7 @@ func (api *API) resolveCreateChatModelConfigID(
 		if isMalformed {
 			api.Logger.Debug(
 				ctx,
-				"malformed personal root model override, using default model",
+				"unsupported personal root model override mode, using default model",
 				slog.F("user_id", userID),
 			)
 		} else if mode == codersdk.ChatPersonalModelOverrideModeModel {

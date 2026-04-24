@@ -2860,6 +2860,9 @@ func (q *querier) GetChatModelConfigsForTelemetry(ctx context.Context) ([]databa
 }
 
 func (q *querier) GetChatPersonalModelOverridesEnabled(ctx context.Context) (bool, error) {
+	// The personal model overrides flag is a deployment-wide setting read by
+	// authenticated chat users. We only require that an explicit actor is
+	// present in the context so unauthenticated calls fail closed.
 	if _, ok := ActorFromContext(ctx); !ok {
 		return false, ErrNoActor
 	}

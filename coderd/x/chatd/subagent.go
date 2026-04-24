@@ -390,7 +390,7 @@ func (p *Server) resolvePersonalModelOverride(
 				slog.Error(err),
 			)
 		default:
-			p.logger.Debug(ctx,
+			p.logger.Warn(ctx,
 				"failed to resolve personal model override, using deployment default",
 				slog.F("override_context", overrideContext),
 				slog.F("owner_id", ownerID),
@@ -437,7 +437,7 @@ func (p *Server) resolveSubagentModelConfigID(
 		)
 	}
 	if personalOverridesEnabled {
-		modelConfigID, handled, err := p.resolvePersonalSubagentModelConfigID(
+		modelConfigID, resolved, err := p.resolvePersonalSubagentModelConfigID(
 			chatdCtx,
 			ownerID,
 			overrideContext,
@@ -445,7 +445,7 @@ func (p *Server) resolveSubagentModelConfigID(
 		if err != nil {
 			return uuid.Nil, err
 		}
-		if handled {
+		if resolved {
 			return modelConfigID, nil
 		}
 	}
