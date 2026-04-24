@@ -249,18 +249,13 @@ ORDER BY key;
 -- name: GetUserChatPersonalModelOverride :one
 SELECT value AS personal_model_override FROM user_configs
 WHERE user_id = @user_id
-	AND key = @key
-	AND key LIKE 'chat\_personal\_model\_override:%';
+	AND key = @key;
 
 -- name: UpsertUserChatPersonalModelOverride :exec
 INSERT INTO user_configs (user_id, key, value)
-SELECT @user_id::uuid, @key::text, @value::text
-WHERE @key::text LIKE 'chat\_personal\_model\_override:%'
+VALUES (@user_id::uuid, @key::text, @value::text)
 ON CONFLICT ON CONSTRAINT user_configs_pkey
-DO UPDATE SET value = @value::text
-WHERE user_configs.user_id = @user_id::uuid
-	AND user_configs.key = @key::text
-	AND user_configs.key LIKE 'chat\_personal\_model\_override:%';
+DO UPDATE SET value = @value::text;
 
 -- name: GetUserTaskNotificationAlertDismissed :one
 SELECT

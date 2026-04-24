@@ -605,7 +605,7 @@ func parseChatPersonalModelOverrideContext(raw string) (codersdk.ChatPersonalMod
 	return "", false
 }
 
-func chatPersonalModelOverrideContextValues() string {
+func chatPersonalModelOverrideContextsJoined() string {
 	values := make([]string, 0, len(chatPersonalModelOverrideContexts))
 	for _, overrideContext := range chatPersonalModelOverrideContexts {
 		values = append(values, string(overrideContext))
@@ -663,6 +663,10 @@ func formatChatPersonalModelOverrideValue(
 	return string(mode)
 }
 
+// chatPersonalModelOverrideKey returns a user_configs key with the
+// chat_personal_model_override: prefix. ListUserChatPersonalModelOverrides
+// relies on that prefix in its LIKE filter when reading personal overrides
+// from the shared user_configs table.
 func chatPersonalModelOverrideKey(
 	overrideContext codersdk.ChatPersonalModelOverrideContext,
 ) string {
@@ -692,6 +696,14 @@ type userChatModelAvailability struct {
 	enabledProviders    map[string]struct{}
 }
 
+// getUserChatProviderAvailability returns chat provider availability for a
+// user. Deployment-level enabled providers and models are read with
+// dbauthz.AsSystemRestricted(ctx) because they are global chat configuration,
+// not user-owned resources. Callers must pass an authenticated user context so
+// user-scoped model checks and provider-key lookups run under the caller's
+// authorization. The returned struct contains configured providers and models
+// for catalog listing, enabled model rows for ID validation, resolved provider
+// status, and normalized enabled-provider membership.
 func (api *API) getUserChatProviderAvailability(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -4241,7 +4253,7 @@ func readChatPersonalModelOverrideContext(
 		Message: "Invalid chat personal model override context.",
 		Detail: fmt.Sprintf(
 			"Expected one of %s. Got %q.",
-			chatPersonalModelOverrideContextValues(),
+			chatPersonalModelOverrideContextsJoined(),
 			rawContext,
 		),
 	})
@@ -4377,10 +4389,11 @@ func (api *API) putUserChatPersonalModelOverride(rw http.ResponseWriter, r *http
 		return
 	}
 
-	modelConfigID := strings.TrimSpace(req.ModelConfigID)
+	modelConfigID := ""
+	rawModelConfigID := strings.TrimSpace(req.ModelConfigID)
 	switch req.Mode {
 	case codersdk.ChatPersonalModelOverrideModeChatDefault:
-		if modelConfigID != "" {
+		if rawModelConfigID != "" {
 			httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
 				Message: "model_config_id must be empty unless mode is model.",
 			})
@@ -4393,20 +4406,20 @@ func (api *API) putUserChatPersonalModelOverride(rw http.ResponseWriter, r *http
 			})
 			return
 		}
-		if modelConfigID != "" {
+		if rawModelConfigID != "" {
 			httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
 				Message: "model_config_id must be empty unless mode is model.",
 			})
 			return
 		}
 	case codersdk.ChatPersonalModelOverrideModeModel:
-		if modelConfigID == "" {
+		if rawModelConfigID == "" {
 			httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
 				Message: "model_config_id is required when mode is model.",
 			})
 			return
 		}
-		parsedModelConfigID, err := uuid.Parse(modelConfigID)
+		parsedModelConfigID, err := uuid.Parse(rawModelConfigID)
 		if err != nil {
 			httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
 				Message: "Invalid model_config_id.",

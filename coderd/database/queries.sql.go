@@ -25283,7 +25283,6 @@ const getUserChatPersonalModelOverride = `-- name: GetUserChatPersonalModelOverr
 SELECT value AS personal_model_override FROM user_configs
 WHERE user_id = $1
 	AND key = $2
-	AND key LIKE 'chat\_personal\_model\_override:%'
 `
 
 type GetUserChatPersonalModelOverrideParams struct {
@@ -26402,13 +26401,9 @@ func (q *sqlQuerier) UpsertUserChatDebugLoggingEnabled(ctx context.Context, arg 
 
 const upsertUserChatPersonalModelOverride = `-- name: UpsertUserChatPersonalModelOverride :exec
 INSERT INTO user_configs (user_id, key, value)
-SELECT $1::uuid, $2::text, $3::text
-WHERE $2::text LIKE 'chat\_personal\_model\_override:%'
+VALUES ($1::uuid, $2::text, $3::text)
 ON CONFLICT ON CONSTRAINT user_configs_pkey
 DO UPDATE SET value = $3::text
-WHERE user_configs.user_id = $1::uuid
-	AND user_configs.key = $2::text
-	AND user_configs.key LIKE 'chat\_personal\_model\_override:%'
 `
 
 type UpsertUserChatPersonalModelOverrideParams struct {
