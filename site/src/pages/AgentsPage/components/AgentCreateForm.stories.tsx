@@ -207,6 +207,31 @@ export const RootPersonalModelOverrideChatDefaultOmitsModel: Story = {
 	},
 };
 
+export const RootOverrideMissingFromCatalog: Story = {
+	args: {
+		...defaultArgs,
+		onCreateChat: fn().mockResolvedValue(undefined),
+		modelConfigs: defaultModelConfigs,
+		rootPersonalModelOverride: buildRootPersonalModelOverride({
+			mode: "model",
+			model_config_id: "model-does-not-exist",
+			is_set: true,
+			is_malformed: false,
+		}),
+	},
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement);
+		expect(
+			canvas.getByRole("combobox", { name: "GPT-4o" }),
+		).toBeInTheDocument();
+		await submitMessage(canvasElement, "create with missing root model");
+		await waitFor(() => {
+			expect(args.onCreateChat).toHaveBeenCalled();
+		});
+		expect(getCreateOptions(args.onCreateChat).model).toBe(modelConfigID);
+	},
+};
+
 export const LastUsedModelFallbackWithoutRootOverride: Story = {
 	args: {
 		...defaultArgs,

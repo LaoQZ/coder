@@ -10623,7 +10623,21 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		"openai",
 		"gpt-4o-personal-disabled-"+uuid.NewString(),
 	)
+	disabledProvider, err := adminClient.CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
+		Provider:             "anthropic",
+		Enabled:              ptr.Ref(false),
+		CentralAPIKeyEnabled: ptr.Ref(false),
+		AllowUserAPIKey:      ptr.Ref(true),
+	})
+	require.NoError(t, err)
+	disabledProviderModelConfig := createAdditionalChatModelConfig(
+		t,
+		adminClient,
+		"anthropic",
+		"claude-personal-disabled-provider-"+uuid.NewString(),
+	)
 	require.NotEqual(t, uuid.Nil, provider.ID)
+	require.NotEqual(t, uuid.Nil, disabledProvider.ID)
 
 	personalOverride := func(
 		resp codersdk.UserChatPersonalModelOverridesResponse,
@@ -10718,7 +10732,7 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		require.Equal(t, string(codersdk.ChatPersonalModelOverrideModeChatDefault), getRaw(codersdk.ChatPersonalModelOverrideContextRoot))
 	})
 
-	err := adminClient.UpdateChatPersonalModelOverridesAdminSettings(ctx, codersdk.UpdateChatPersonalModelOverridesAdminSettingsRequest{
+	err = adminClient.UpdateChatPersonalModelOverridesAdminSettings(ctx, codersdk.UpdateChatPersonalModelOverridesAdminSettingsRequest{
 		AllowUsers: true,
 	})
 	require.NoError(t, err)
@@ -10728,6 +10742,16 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		codersdk.ChatPersonalModelOverrideContextGeneral,
 		codersdk.ChatPersonalModelOverrideContextExplore,
 	}
+
+	t.Run("PUTRejectsUnknownMode", func(t *testing.T) {
+		rawBefore := getRaw(codersdk.ChatPersonalModelOverrideContextGeneral)
+		err := memberClient.UpdateUserChatPersonalModelOverride(ctx, codersdk.ChatPersonalModelOverrideContextGeneral, codersdk.UpdateUserChatPersonalModelOverrideRequest{
+			Mode: codersdk.ChatPersonalModelOverrideMode("banana"),
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Contains(t, sdkErr.Message, "Invalid personal model override mode.")
+		require.Equal(t, rawBefore, getRaw(codersdk.ChatPersonalModelOverrideContextGeneral))
+	})
 
 	t.Run("PUTChatDefaultRoundTrips", func(t *testing.T) {
 		for _, overrideContext := range contexts {
@@ -10829,6 +10853,13 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 				modelConfigID: disabledModelConfig.ID.String(),
 				wantMessageSubstring: "Invalid model_config_id: model config " +
 					"not found or disabled.",
+			},
+			{
+				name:                 "ProviderDisabled",
+				client:               memberClient,
+				userID:               member.ID,
+				modelConfigID:        disabledProviderModelConfig.ID.String(),
+				wantMessageSubstring: "provider is not enabled",
 			},
 			{
 				name:          "CredentialUnavailable",

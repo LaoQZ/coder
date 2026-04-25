@@ -304,6 +304,7 @@ func (p *Server) resolvePersonalSubagentModelConfigID(
 	switch parsed.Mode {
 	case codersdk.ChatPersonalModelOverrideModeChatDefault:
 		return uuid.Nil, true, nil
+	case codersdk.ChatPersonalModelOverrideModeDeploymentDefault:
 	case codersdk.ChatPersonalModelOverrideModeModel:
 		modelConfig, ok, err := p.resolvePersonalModelOverride(
 			ctx,
@@ -317,6 +318,13 @@ func (p *Server) resolvePersonalSubagentModelConfigID(
 		if ok {
 			return modelConfig.ID, true, nil
 		}
+	default:
+		p.logger.Warn(ctx,
+			"unsupported personal model override mode, using deployment default",
+			slog.F("override_context", overrideContext),
+			slog.F("owner_id", ownerID),
+			slog.F("mode", parsed.Mode),
+		)
 	}
 
 	return uuid.Nil, false, nil

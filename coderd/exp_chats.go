@@ -672,6 +672,9 @@ type userChatModelAvailability struct {
 	enabledProviderNames map[string]struct{}
 }
 
+// chatModelConfigUnavailableReason reports why a model config cannot be used.
+// The empty value means the model config is available. Callers must check the
+// error returned by userCanUseChatModelConfig before interpreting this value.
 type chatModelConfigUnavailableReason string
 
 const (
@@ -756,6 +759,9 @@ func (api *API) getUserChatProviderAvailability(
 	return availability, nil
 }
 
+// userCanUseChatModelConfig returns chatModelConfigAvailable when the user can
+// use the model config. If err is non-nil, callers must ignore the returned
+// reason because it may be the zero-value availability sentinel.
 func (api *API) userCanUseChatModelConfig(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -3936,12 +3942,8 @@ func (api *API) resolveCreateChatModelConfigID(
 		}
 		switch parsed.Mode {
 		case codersdk.ChatPersonalModelOverrideModeChatDefault:
-		case codersdk.ChatPersonalModelOverrideModeDeploymentDefault:
-			api.Logger.Debug(
-				ctx,
-				"personal root model override uses deployment default, using default model",
-				slog.F("user_id", userID),
-			)
+			// For root context, chat_default falls through to the
+			// deployment default model below.
 		case codersdk.ChatPersonalModelOverrideModeModel:
 			reason, err := api.userCanUseChatModelConfig(
 				ctx,
@@ -3963,13 +3965,6 @@ func (api *API) resolveCreateChatModelConfigID(
 				slog.F("user_id", userID),
 				slog.F("model_config_id", parsed.ModelConfigID),
 				slog.F("reason", reason),
-			)
-		default:
-			api.Logger.Warn(
-				ctx,
-				"unsupported personal root model override mode, using default model",
-				slog.F("user_id", userID),
-				slog.F("mode", parsed.Mode),
 			)
 		}
 	}
