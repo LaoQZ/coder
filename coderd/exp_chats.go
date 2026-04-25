@@ -3942,8 +3942,8 @@ func (api *API) resolveCreateChatModelConfigID(
 		}
 		switch parsed.Mode {
 		case codersdk.ChatPersonalModelOverrideModeChatDefault:
-			// For root context, chat_default falls through to the
-			// deployment default model below.
+			// For root context, chat_default and the defensive default
+			// case both fall through to the deployment default model below.
 		case codersdk.ChatPersonalModelOverrideModeModel:
 			reason, err := api.userCanUseChatModelConfig(
 				ctx,
@@ -3965,6 +3965,13 @@ func (api *API) resolveCreateChatModelConfigID(
 				slog.F("user_id", userID),
 				slog.F("model_config_id", parsed.ModelConfigID),
 				slog.F("reason", reason),
+			)
+		default:
+			api.Logger.Warn(
+				ctx,
+				"unsupported personal root model override mode, using default model",
+				slog.F("user_id", userID),
+				slog.F("mode", parsed.Mode),
 			)
 		}
 	}

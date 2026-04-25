@@ -10769,6 +10769,17 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		}
 	})
 
+	t.Run("PUTChatDefaultRejectsNonEmptyModelConfigID", func(t *testing.T) {
+		rawBefore := getRaw(codersdk.ChatPersonalModelOverrideContextRoot)
+		err := memberClient.UpdateUserChatPersonalModelOverride(ctx, codersdk.ChatPersonalModelOverrideContextRoot, codersdk.UpdateUserChatPersonalModelOverrideRequest{
+			Mode:          codersdk.ChatPersonalModelOverrideModeChatDefault,
+			ModelConfigID: modelConfig.ID.String(),
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Contains(t, sdkErr.Message, "model_config_id must be empty")
+		require.Equal(t, rawBefore, getRaw(codersdk.ChatPersonalModelOverrideContextRoot))
+	})
+
 	t.Run("PUTDeploymentDefaultRoundTripsForAgentContexts", func(t *testing.T) {
 		for _, overrideContext := range []codersdk.ChatPersonalModelOverrideContext{
 			codersdk.ChatPersonalModelOverrideContextGeneral,
@@ -10784,6 +10795,17 @@ func TestUserChatPersonalModelOverrides(t *testing.T) {
 		require.NoError(t, err)
 		assertOverride(resp, codersdk.ChatPersonalModelOverrideContextGeneral, codersdk.ChatPersonalModelOverrideModeDeploymentDefault, "", true, false)
 		assertOverride(resp, codersdk.ChatPersonalModelOverrideContextExplore, codersdk.ChatPersonalModelOverrideModeDeploymentDefault, "", true, false)
+	})
+
+	t.Run("PUTDeploymentDefaultRejectsNonEmptyModelConfigID", func(t *testing.T) {
+		rawBefore := getRaw(codersdk.ChatPersonalModelOverrideContextGeneral)
+		err := memberClient.UpdateUserChatPersonalModelOverride(ctx, codersdk.ChatPersonalModelOverrideContextGeneral, codersdk.UpdateUserChatPersonalModelOverrideRequest{
+			Mode:          codersdk.ChatPersonalModelOverrideModeDeploymentDefault,
+			ModelConfigID: modelConfig.ID.String(),
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Contains(t, sdkErr.Message, "model_config_id must be empty")
+		require.Equal(t, rawBefore, getRaw(codersdk.ChatPersonalModelOverrideContextGeneral))
 	})
 
 	t.Run("PUTDeploymentDefaultRejectsRoot", func(t *testing.T) {
