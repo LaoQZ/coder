@@ -1,8 +1,10 @@
 import type { FC } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import {
+	chatComputerUseProvider,
 	chatDebugLogging,
 	chatDesktopEnabled,
+	updateChatComputerUseProvider,
 	updateChatDebugLogging,
 	updateChatDesktopEnabled,
 } from "#/api/queries/chats";
@@ -17,12 +19,19 @@ const AgentSettingsExperimentsPage: FC = () => {
 		...chatDesktopEnabled(),
 		enabled: permissions.editDeploymentConfig,
 	});
+	const computerUseProviderQuery = useQuery({
+		...chatComputerUseProvider(),
+		enabled: permissions.editDeploymentConfig,
+	});
 	const debugLoggingQuery = useQuery({
 		...chatDebugLogging(),
 		enabled: permissions.editDeploymentConfig,
 	});
 	const saveDesktopEnabledMutation = useMutation(
 		updateChatDesktopEnabled(queryClient),
+	);
+	const saveComputerUseProviderMutation = useMutation(
+		updateChatComputerUseProvider(queryClient),
 	);
 	const saveDebugLoggingMutation = useMutation(
 		updateChatDebugLogging(queryClient),
@@ -35,6 +44,10 @@ const AgentSettingsExperimentsPage: FC = () => {
 				onSaveDesktopEnabled={saveDesktopEnabledMutation.mutate}
 				isSavingDesktopEnabled={saveDesktopEnabledMutation.isPending}
 				isSaveDesktopEnabledError={saveDesktopEnabledMutation.isError}
+				computerUseProviderData={computerUseProviderQuery.data}
+				onSaveComputerUseProvider={saveComputerUseProviderMutation.mutate}
+				isSavingComputerUseProvider={saveComputerUseProviderMutation.isPending}
+				computerUseProviderSaveError={saveComputerUseProviderMutation.error}
 				debugLoggingData={debugLoggingQuery.data}
 				onSaveDebugLogging={saveDebugLoggingMutation.mutate}
 				isSavingDebugLogging={saveDebugLoggingMutation.isPending}

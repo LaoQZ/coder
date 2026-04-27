@@ -3343,6 +3343,24 @@ class ExperimentalApiMethods {
 		await this.axios.put("/api/experimental/chats/config/desktop-enabled", req);
 	};
 
+	getChatComputerUseProvider =
+		async (): Promise<TypesGen.ChatComputerUseProviderResponse> => {
+			const response =
+				await this.axios.get<TypesGen.ChatComputerUseProviderResponse>(
+					"/api/experimental/chats/config/computer-use-provider",
+				);
+			return response.data;
+		};
+
+	updateChatComputerUseProvider = async (
+		req: TypesGen.UpdateChatComputerUseProviderRequest,
+	): Promise<void> => {
+		await this.axios.put(
+			"/api/experimental/chats/config/computer-use-provider",
+			req,
+		);
+	};
+
 	getChatWorkspaceTTL =
 		async (): Promise<TypesGen.ChatWorkspaceTTLResponse> => {
 			const response = await this.axios.get<TypesGen.ChatWorkspaceTTLResponse>(
