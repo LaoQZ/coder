@@ -714,6 +714,69 @@ export const ClearCommandResult: Story = {
 	},
 };
 
+export const ClearCommandError: Story = {
+	decorators: [withToaster],
+	parameters: {
+		queries: buildQueries(
+			{
+				id: CHAT_ID,
+				...baseChatFields,
+				title: "Clear command error",
+				status: "completed",
+			},
+			{
+				messages: [
+					{
+						id: 1,
+						chat_id: CHAT_ID,
+						created_at: "2026-02-18T00:00:00.000Z",
+						role: "user",
+						content: [{ type: "text", text: "Visible history" }],
+					},
+				],
+				queued_messages: [],
+				has_more: false,
+			},
+			{ diffUrl: undefined },
+		),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const body = within(canvasElement.ownerDocument.body);
+		const user = userEvent.setup();
+		const createMessageSpy = spyOn(
+			API.experimental,
+			"createChatMessage",
+		).mockRejectedValue({
+			isAxiosError: true,
+			response: {
+				data: {
+					message:
+						"Wait for the chat to finish or interrupt it before clearing context.",
+					command: "clear",
+				},
+			},
+		});
+
+		const editor = await canvas.findByRole("textbox");
+		await user.click(editor);
+		await user.type(editor, "/clear");
+		await user.click(canvas.getByRole("button", { name: "Send" }));
+
+		await waitFor(() => {
+			expect(createMessageSpy).toHaveBeenCalledWith(
+				CHAT_ID,
+				expect.objectContaining({
+					content: [{ type: "text", text: "/clear" }],
+				}),
+			);
+		});
+		await body.findByText(
+			"Wait for the chat to finish or interrupt it before clearing context.",
+		);
+	},
+};
+
 export const RemoteContextClearedEvent: Story = {
 	parameters: {
 		queries: buildQueries(
