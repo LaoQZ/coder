@@ -30,10 +30,11 @@ export const SidebarItem: FC<SidebarItemProps> = ({
 	return (
 		<button
 			className={cn(
-				"border-none text-sm w-full text-left px-6 py-2.5 cursor-pointer",
+				"py-2.5 px-6 border-0 text-sm w-full text-left cursor-pointer",
+				"hover:bg-surface-tertiary hover:text-content-primary",
 				active
-					? "bg-surface-secondary text-content-primary pointer-events-none"
-					: "bg-transparent text-content-secondary hover:bg-surface-tertiary hover:text-content-primary",
+					? "text-content-primary pointer-events-none bg-surface-secondary"
+					: "text-content-secondary pointer-events-auto bg-transparent",
 			)}
 			{...attrs}
 		>
@@ -44,11 +45,15 @@ export const SidebarItem: FC<SidebarItemProps> = ({
 
 export const SidebarCaption: FC<HTMLAttributes<HTMLDivElement>> = ({
 	children,
+	className,
 	...attrs
 }) => {
 	return (
 		<div
-			className="text-2xs uppercase font-medium text-content-secondary py-3 px-6 tracking-[0.5px]"
+			className={cn(
+				"text-[10px] uppercase font-medium text-content-secondary",
+				"px-6 py-3 tracking-[0.5px]",
+			)}
 			{...attrs}
 		>
 			{children}

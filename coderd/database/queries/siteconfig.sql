@@ -159,6 +159,30 @@ SELECT
 INSERT INTO site_configs (key, value) VALUES ('agents_chat_system_prompt', $1)
 ON CONFLICT (key) DO UPDATE SET value = $1 WHERE site_configs.key = 'agents_chat_system_prompt';
 
+-- name: GetChatPlanModeInstructions :one
+SELECT
+	COALESCE((SELECT value FROM site_configs WHERE key = 'agents_chat_plan_mode_instructions'), '') :: text AS plan_mode_instructions;
+
+-- name: UpsertChatPlanModeInstructions :exec
+INSERT INTO site_configs (key, value) VALUES ('agents_chat_plan_mode_instructions', $1)
+ON CONFLICT (key) DO UPDATE SET value = $1 WHERE site_configs.key = 'agents_chat_plan_mode_instructions';
+
+-- name: GetChatExploreModelOverride :one
+SELECT
+	COALESCE((SELECT value FROM site_configs WHERE key = 'agents_chat_explore_model_override'), '') :: text AS model_config_id;
+
+-- name: UpsertChatExploreModelOverride :exec
+INSERT INTO site_configs (key, value) VALUES ('agents_chat_explore_model_override', $1)
+ON CONFLICT (key) DO UPDATE SET value = $1 WHERE site_configs.key = 'agents_chat_explore_model_override';
+
+-- name: GetChatGeneralModelOverride :one
+SELECT
+	COALESCE((SELECT value FROM site_configs WHERE key = 'agents_chat_general_model_override'), '') :: text AS model_config_id;
+
+-- name: UpsertChatGeneralModelOverride :exec
+INSERT INTO site_configs (key, value) VALUES ('agents_chat_general_model_override', $1)
+ON CONFLICT (key) DO UPDATE SET value = $1 WHERE site_configs.key = 'agents_chat_general_model_override';
+
 -- name: GetChatDesktopEnabled :one
 SELECT
 	COALESCE((SELECT value = 'true' FROM site_configs WHERE key = 'agents_desktop_enabled'), false) :: boolean AS enable_desktop;
@@ -178,6 +202,31 @@ SET value = CASE
     ELSE 'false'
 END
 WHERE site_configs.key = 'agents_desktop_enabled';
+
+-- GetChatDebugLoggingAllowUsers returns the runtime admin setting that
+-- allows users to opt into chat debug logging when the deployment does
+-- not already force debug logging on globally.
+-- name: GetChatDebugLoggingAllowUsers :one
+SELECT
+	COALESCE((SELECT value = 'true' FROM site_configs WHERE key = 'agents_chat_debug_logging_allow_users'), false) :: boolean AS allow_users;
+
+-- UpsertChatDebugLoggingAllowUsers updates the runtime admin setting that
+-- allows users to opt into chat debug logging.
+-- name: UpsertChatDebugLoggingAllowUsers :exec
+INSERT INTO site_configs (key, value)
+VALUES (
+    'agents_chat_debug_logging_allow_users',
+    CASE
+        WHEN sqlc.arg(allow_users)::bool THEN 'true'
+        ELSE 'false'
+    END
+)
+ON CONFLICT (key) DO UPDATE
+SET value = CASE
+    WHEN sqlc.arg(allow_users)::bool THEN 'true'
+    ELSE 'false'
+END
+WHERE site_configs.key = 'agents_chat_debug_logging_allow_users';
 
 -- GetChatTemplateAllowlist returns the JSON-encoded template allowlist.
 -- Returns an empty string when no allowlist has been configured (all templates allowed).
@@ -253,3 +302,17 @@ INSERT INTO site_configs (key, value)
 VALUES ('agents_chat_retention_days', CAST(@retention_days AS integer)::text)
 ON CONFLICT (key) DO UPDATE SET value = CAST(@retention_days AS integer)::text
 WHERE site_configs.key = 'agents_chat_retention_days';
+
+-- name: GetChatAutoArchiveDays :one
+-- Auto-archive window in days. 0 disables.
+SELECT COALESCE(
+    (SELECT value::integer FROM site_configs
+     WHERE key = 'agents_chat_auto_archive_days'),
+    @default_auto_archive_days::integer
+) :: integer AS auto_archive_days;
+
+-- name: UpsertChatAutoArchiveDays :exec
+INSERT INTO site_configs (key, value)
+VALUES ('agents_chat_auto_archive_days', CAST(@auto_archive_days AS integer)::text)
+ON CONFLICT (key) DO UPDATE SET value = CAST(@auto_archive_days AS integer)::text
+WHERE site_configs.key = 'agents_chat_auto_archive_days';

@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from "react";
 import { Avatar } from "#/components/Avatar/Avatar";
+import { cn } from "#/utils/cn";
 
 type AvatarCardProps = {
 	header: string;
@@ -16,7 +17,10 @@ export const AvatarCard: FC<AvatarCardProps> = ({
 }) => {
 	return (
 		<div
-			className="flex flex-row flex-nowrap items-center border border-solid border-border gap-4 p-4 rounded-lg cursor-default"
+			className={cn(
+				"flex flex-row flex-nowrap gap-4 items-center",
+				"border border-solid p-4 rounded-lg cursor-default",
+			)}
 			style={{
 				maxWidth: maxWidth === "none" ? undefined : `${maxWidth}px`,
 			}}
@@ -31,7 +35,7 @@ export const AvatarCard: FC<AvatarCardProps> = ({
 				<h3
 					// Lets users hover over truncated text to see whole thing
 					title={header}
-					className="text-[1rem] leading-[1.4] m-0 truncate"
+					className="text-base leading-snug m-0 truncate"
 				>
 					{header}
 				</h3>

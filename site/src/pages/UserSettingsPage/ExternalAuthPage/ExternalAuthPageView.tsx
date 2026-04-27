@@ -1,4 +1,4 @@
-import { EllipsisVertical, RefreshCcwIcon } from "lucide-react";
+import { EllipsisVerticalIcon, RefreshCcwIcon } from "lucide-react";
 import { type FC, useCallback, useEffect, useState } from "react";
 import { useQuery } from "react-query";
 import { externalAuthProvider } from "#/api/queries/externalAuth";
@@ -172,7 +172,7 @@ const ExternalAuthRow: FC<ExternalAuthRowProps> = ({
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
 						<Button size="icon-lg" variant="subtle" aria-label="Open menu">
-							<EllipsisVertical aria-hidden="true" />
+							<EllipsisVerticalIcon aria-hidden="true" />
 							<span className="sr-only">Open menu</span>
 						</Button>
 					</DropdownMenuTrigger>

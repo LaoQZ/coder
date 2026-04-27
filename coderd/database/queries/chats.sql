@@ -373,6 +373,11 @@ WHERE
         WHEN sqlc.narg('label_filter')::jsonb IS NOT NULL THEN chats.labels @> sqlc.narg('label_filter')::jsonb
         ELSE true
     END
+    -- Paginate over root chats only. Children are fetched
+    -- separately via GetChildChatsByParentIDs and embedded under
+    -- each parent. Other callers that need the full set should
+    -- use a narrower query (e.g. GetChatsByWorkspaceIDs).
+    AND chats.parent_chat_id IS NULL
     -- Authorize Filter clause will be injected below in GetAuthorizedChats
     -- @authorize_filter
 ORDER BY
@@ -390,8 +395,35 @@ LIMIT
     -- Default to 50 to prevent accidental excessively large queries.
     COALESCE(NULLIF(@limit_opt :: int, 0), 50);
 
+-- name: GetChildChatsByParentIDs :many
+-- Fetches child chats of the given parents, optionally filtered by
+-- archive state (NULL = all, true/false = match). The archive
+-- invariant (parent archived implies child archived) is enforced
+-- at write time, not here.
+SELECT
+    sqlc.embed(chats),
+    EXISTS (
+        SELECT 1 FROM chat_messages cm
+        WHERE cm.chat_id = chats.id
+            AND cm.role = 'assistant'
+            AND cm.deleted = false
+            AND cm.id > COALESCE(chats.last_read_message_id, 0)
+    ) AS has_unread
+FROM
+    chats
+WHERE
+    chats.parent_chat_id = ANY(@parent_ids :: uuid[])
+    AND CASE
+        WHEN sqlc.narg('archived') :: boolean IS NULL THEN true
+        ELSE chats.archived = sqlc.narg('archived') :: boolean
+    END
+ORDER BY
+    chats.created_at DESC,
+    chats.id DESC;
+
 -- name: InsertChat :one
 INSERT INTO chats (
+    organization_id,
     owner_id,
     workspace_id,
     build_id,
@@ -401,11 +433,14 @@ INSERT INTO chats (
     last_model_config_id,
     title,
     mode,
+    plan_mode,
     status,
     mcp_server_ids,
     labels,
-    dynamic_tools
+    dynamic_tools,
+    client_type
 ) VALUES (
+    @organization_id::uuid,
     @owner_id::uuid,
     sqlc.narg('workspace_id')::uuid,
     sqlc.narg('build_id')::uuid,
@@ -415,10 +450,12 @@ INSERT INTO chats (
     @last_model_config_id::uuid,
     @title::text,
     sqlc.narg('mode')::chat_mode,
+    sqlc.narg('plan_mode')::chat_plan_mode,
     @status::chat_status,
     COALESCE(@mcp_server_ids::uuid[], '{}'::uuid[]),
     COALESCE(sqlc.narg('labels')::jsonb, '{}'::jsonb),
-    sqlc.narg('dynamic_tools')::jsonb
+    sqlc.narg('dynamic_tools')::jsonb,
+    @client_type::chat_client_type
 )
 RETURNING
     *;
@@ -511,6 +548,30 @@ UPDATE
 SET
     title = @title::text,
     updated_at = NOW()
+WHERE
+    id = @id::uuid
+RETURNING
+    *;
+
+-- name: UpdateChatTitleByID :one
+UPDATE
+    chats
+SET
+    -- NOTE: updated_at is intentionally NOT touched here to avoid
+    -- changing list ordering when a user renames an older chat
+    -- out-of-band.
+    title = @title::text
+WHERE
+    id = @id::uuid
+RETURNING
+    *;
+
+-- name: UpdateChatPlanModeByID :one
+UPDATE
+    chats
+SET
+    -- NOTE: updated_at is intentionally NOT touched here to avoid changing list ordering.
+    plan_mode = sqlc.narg('plan_mode')::chat_plan_mode
 WHERE
     id = @id::uuid
 RETURNING
@@ -634,6 +695,7 @@ WHERE
             chats
         WHERE
             status = 'pending'::chat_status
+            AND archived = false
         ORDER BY
             updated_at ASC
         FOR UPDATE
@@ -820,8 +882,12 @@ RETURNING
     *;
 
 -- name: InsertChatQueuedMessage :one
-INSERT INTO chat_queued_messages (chat_id, content)
-VALUES (@chat_id, @content)
+INSERT INTO chat_queued_messages (chat_id, content, model_config_id)
+VALUES (
+    @chat_id,
+    @content,
+    sqlc.narg('model_config_id')::uuid
+)
 RETURNING *;
 
 -- name: GetChatQueuedMessages :many
@@ -916,6 +982,28 @@ SET
     stale_at = @stale_at::timestamptz
 WHERE
     chat_id = @chat_id::uuid;
+
+-- name: GetChatDiffStatusSummary :one
+-- Returns aggregate PR counts across all agent chats for telemetry.
+-- Deduplicates by PR URL so forked chats referencing the same pull
+-- request are counted once (using the most recently refreshed state).
+-- Total is derived from the three recognized state buckets and
+-- always equals open + merged + closed; other non-NULL states are
+-- intentionally excluded from these aggregates.
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(NULLIF(cds.url, ''), c.id::text))
+        cds.pull_request_state
+    FROM chat_diff_statuses cds
+    JOIN chats c ON c.id = cds.chat_id
+    WHERE cds.pull_request_state IN ('open', 'merged', 'closed')
+    ORDER BY COALESCE(NULLIF(cds.url, ''), c.id::text), cds.updated_at DESC, c.id DESC
+)
+SELECT
+    COUNT(*)::bigint AS total,
+    COUNT(*) FILTER (WHERE pull_request_state = 'open')::bigint AS open,
+    COUNT(*) FILTER (WHERE pull_request_state = 'merged')::bigint AS merged,
+    COUNT(*) FILTER (WHERE pull_request_state = 'closed')::bigint AS closed
+FROM deduped;
 
 -- name: GetChatCostSummary :one
 -- Aggregate cost summary for a single user within a date range.
@@ -1132,10 +1220,16 @@ FROM users
 WHERE id = @user_id::uuid AND chat_spend_limit_micros IS NOT NULL;
 
 -- name: GetUserChatSpendInPeriod :one
+-- Returns the total spend for a user in the given period.
+-- When organization_id is NULL, spend across all organizations is
+-- returned (global behavior). Otherwise only spend within the
+-- specified organization is included.
 SELECT COALESCE(SUM(cm.total_cost_micros), 0)::bigint AS total_spend_micros
 FROM chat_messages cm
 JOIN chats c ON c.id = cm.chat_id
 WHERE c.owner_id = @user_id::uuid
+  AND (sqlc.narg('organization_id')::uuid IS NULL
+       OR c.organization_id = sqlc.narg('organization_id')::uuid)
   AND cm.created_at >= @start_time::timestamptz
   AND cm.created_at < @end_time::timestamptz
   AND cm.total_cost_micros IS NOT NULL;
@@ -1187,11 +1281,16 @@ WHERE id = @group_id::uuid AND chat_spend_limit_micros IS NOT NULL;
 
 -- name: GetUserGroupSpendLimit :one
 -- Returns the minimum (most restrictive) group limit for a user.
--- Returns -1 if the user has no group limits applied.
+-- Returns -1 if no group limits match the specified scope.
+-- When organization_id is NULL, groups across all organizations are
+-- considered (global behavior). Otherwise only groups within the
+-- specified organization are considered.
 SELECT COALESCE(MIN(g.chat_spend_limit_micros), -1)::bigint AS limit_micros
 FROM groups g
 JOIN group_members_expanded gme ON gme.group_id = g.id
 WHERE gme.user_id = @user_id::uuid
+  AND (sqlc.narg('organization_id')::uuid IS NULL
+       OR g.organization_id = sqlc.narg('organization_id')::uuid)
   AND g.chat_spend_limit_micros IS NOT NULL;
 
 -- name: GetChatsByWorkspaceIDs :many
@@ -1203,20 +1302,28 @@ ORDER BY workspace_id, updated_at DESC;
 
 -- name: ResolveUserChatSpendLimit :one
 -- Resolves the effective spend limit for a user using the hierarchy:
--- 1. Individual user override (highest priority)
--- 2. Minimum group limit across all user's groups
+-- 1. Individual user override (highest priority, applies globally across
+--    all organizations since it lives on the users table)
+-- 2. Minimum group limit across the user's groups
 -- 3. Global default from config
 -- Returns -1 if limits are not enabled.
+-- When organization_id is NULL, groups across all organizations are
+-- considered (global behavior). Otherwise only groups within the
+-- specified organization are considered.
+-- limit_source indicates which tier won: 'user', 'group', 'default',
+-- or 'disabled'.
 SELECT CASE
-    -- If limits are disabled, return -1.
     WHEN NOT cfg.enabled THEN -1
-    -- Individual override takes priority.
     WHEN u.chat_spend_limit_micros IS NOT NULL THEN u.chat_spend_limit_micros
-    -- Group limit (minimum across all user's groups) is next.
     WHEN gl.limit_micros IS NOT NULL THEN gl.limit_micros
-    -- Fall back to global default.
     ELSE cfg.default_limit_micros
-END::bigint AS effective_limit_micros
+END::bigint AS effective_limit_micros,
+CASE
+    WHEN NOT cfg.enabled THEN 'disabled'
+    WHEN u.chat_spend_limit_micros IS NOT NULL THEN 'user'
+    WHEN gl.limit_micros IS NOT NULL THEN 'group'
+    ELSE 'default'
+END AS limit_source
 FROM chat_usage_limit_config cfg
 CROSS JOIN users u
 LEFT JOIN LATERAL (
@@ -1224,6 +1331,8 @@ LEFT JOIN LATERAL (
     FROM groups g
     JOIN group_members_expanded gme ON gme.group_id = g.id
     WHERE gme.user_id = @user_id::uuid
+      AND (sqlc.narg('organization_id')::uuid IS NULL
+           OR g.organization_id = sqlc.narg('organization_id')::uuid)
       AND g.chat_spend_limit_micros IS NOT NULL
 ) gl ON TRUE
 WHERE u.id = @user_id::uuid
@@ -1260,12 +1369,14 @@ WHERE chats.id = deletable.id
 -- snapshot collection. Uses updated_at so that long-running chats
 -- still appear in each snapshot window while they are active.
 SELECT
-    id, owner_id, created_at, updated_at, status,
-    (parent_chat_id IS NOT NULL)::bool AS has_parent,
-    root_chat_id, workspace_id,
-    mode, archived, last_model_config_id
-FROM chats
-WHERE updated_at > @updated_after;
+    c.id, c.owner_id, c.created_at, c.updated_at, c.status,
+    (c.parent_chat_id IS NOT NULL)::bool AS has_parent,
+    c.root_chat_id, c.workspace_id,
+    c.mode, c.archived, c.last_model_config_id, c.client_type,
+    cds.pull_request_state
+FROM chats c
+LEFT JOIN chat_diff_statuses cds ON cds.chat_id = c.id
+WHERE c.updated_at > @updated_after;
 
 -- name: GetChatMessageSummariesPerChat :many
 -- Aggregates message-level metrics per chat for messages created
@@ -1320,3 +1431,55 @@ UPDATE chat_messages SET deleted = true
 WHERE chat_id = @chat_id::uuid
     AND deleted = false
     AND content::jsonb @> '[{"type": "context-file"}]';
+
+-- name: AutoArchiveInactiveChats :many
+-- Archives inactive root chats (pinned and already-archived chats skipped),
+-- cascading to children via root_chat_id. Limits apply to roots, not total
+-- rows. Used by dbpurge.
+WITH to_archive AS (
+    SELECT
+        c.id,
+        -- Activity = MAX(cm.created_at) across the family, or c.created_at
+        -- when the family has no non-deleted messages.
+        COALESCE(activity.last_activity_at, c.created_at) AS last_activity_at
+    FROM chats c
+    LEFT JOIN LATERAL (
+        SELECT MAX(cm.created_at) AS last_activity_at
+        FROM chat_messages cm
+        JOIN chats fc ON fc.id = cm.chat_id
+        WHERE (fc.id = c.id OR fc.root_chat_id = c.id)
+          AND cm.deleted = false
+    ) activity ON TRUE
+    WHERE c.archived = false
+      AND c.pin_order = 0
+      AND c.parent_chat_id IS NULL -- roots only
+      AND c.created_at < @archive_cutoff::timestamptz
+      -- New active statuses must be added here to prevent archiving.
+      AND c.status NOT IN ('running', 'pending', 'paused', 'requires_action')
+      AND COALESCE(activity.last_activity_at, c.created_at) < @archive_cutoff::timestamptz
+    -- Sorting by created_at lets Postgres drive the scan from the
+    -- partial index instead of evaluating every LATERAL subquery
+    -- before sorting. All candidates are past the cutoff, so the
+    -- archive order is immaterial once the backlog drains.
+    ORDER BY c.created_at ASC
+    LIMIT @limit_count
+),
+archived AS (
+    UPDATE chats c
+    SET archived = true, pin_order = 0, updated_at = NOW()
+    FROM to_archive t
+    WHERE (c.id = t.id OR c.root_chat_id = t.id) -- cascade to children
+      AND c.archived = false
+    RETURNING c.*
+)
+SELECT
+    a.*,
+    -- Children inherit their root's activity so last_activity_at is never null.
+    COALESCE(
+        t.last_activity_at,
+        (SELECT tr.last_activity_at FROM to_archive tr WHERE tr.id = a.root_chat_id),
+        a.created_at
+    )::timestamptz AS last_activity_at
+FROM archived a
+LEFT JOIN to_archive t ON t.id = a.id
+ORDER BY (a.root_chat_id IS NULL) DESC, a.owner_id ASC, a.created_at ASC, a.id ASC;

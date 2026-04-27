@@ -20,6 +20,9 @@ interface SectionProps {
 	featureStage?: keyof typeof featureStageBadgeTypes;
 }
 
+const DESCRIPTION_CLASS =
+	"text-content-secondary text-base m-0 mt-1 leading-normal";
+
 export const Section: FC<SectionProps> = ({
 	id,
 	title,
@@ -50,14 +53,10 @@ export const Section: FC<SectionProps> = ({
 								</Stack>
 							)}
 							{description && typeof description === "string" && (
-								<p className="text-content-secondary text-base m-0 mt-1 leading-[140%]">
-									{description}
-								</p>
+								<p className={DESCRIPTION_CLASS}>{description}</p>
 							)}
 							{description && typeof description !== "string" && (
-								<div className="text-content-secondary text-base m-0 mt-1 leading-[140%]">
-									{description}
-								</div>
+								<div className={DESCRIPTION_CLASS}>{description}</div>
 							)}
 						</div>
 						{toolbar && <div>{toolbar}</div>}

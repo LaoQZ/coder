@@ -12,7 +12,6 @@ import type {
 import { MemoizedInlineMarkdown } from "#/components/Markdown/InlineMarkdown";
 import { useDashboard } from "#/modules/dashboard/useDashboard";
 import { TemplateUpdateMessage } from "#/modules/templates/TemplateUpdateMessage";
-import { getAgentHealthIssue } from "#/modules/workspaces/health";
 
 dayjs.extend(relativeTime);
 
@@ -91,30 +90,47 @@ export const WorkspaceNotifications: FC<WorkspaceNotificationsProps> = ({
 		!workspace.health.healthy
 	) {
 		const troubleshootingURL = findTroubleshootingURL(workspace.latest_build);
-		const hasActions = permissions.updateWorkspace || troubleshootingURL;
-		const healthIssue = getAgentHealthIssue(workspace);
 
-		notifications.push({
-			title: healthIssue.title,
-			severity: healthIssue.severity,
-			detail: healthIssue.detail,
-			actions: hasActions ? (
-				<>
-					{permissions.updateWorkspace && (
-						<NotificationActionButton onClick={onRestartWorkspace}>
-							Restart
-						</NotificationActionButton>
-					)}
-					{troubleshootingURL && (
-						<NotificationActionButton
-							onClick={() => window.open(troubleshootingURL, "_blank")}
-						>
-							Troubleshooting
-						</NotificationActionButton>
-					)}
-				</>
-			) : undefined,
-		});
+		if (isStartupScriptFailure(workspace)) {
+			// Restarting won't fix a broken startup script, so omit the Restart
+			// button and guide the user to their template admin instead.
+			notifications.push({
+				title: "A startup script has failed",
+				severity: "warning",
+				detail:
+					"The workspace agent is running but a startup script exited with an error.",
+				actions: troubleshootingURL ? (
+					<NotificationActionButton
+						onClick={() => window.open(troubleshootingURL, "_blank")}
+					>
+						Troubleshooting
+					</NotificationActionButton>
+				) : undefined,
+			});
+		} else {
+			const hasActions = permissions.updateWorkspace || troubleshootingURL;
+			notifications.push({
+				title: "One or more workspace agents need attention",
+				severity: "warning",
+				detail: "Expand an agent's logs to view per-agent health details.",
+				actions: hasActions ? (
+					<>
+						{permissions.updateWorkspace && (
+							<NotificationActionButton onClick={onRestartWorkspace}>
+								Restart
+							</NotificationActionButton>
+						)}
+						{troubleshootingURL && (
+							<NotificationActionButton
+								onClick={() => window.open(troubleshootingURL, "_blank")}
+							>
+								Troubleshooting
+							</NotificationActionButton>
+						)}
+					</>
+				) : undefined,
+			});
+		}
 	}
 
 	// Dormant
@@ -254,14 +270,16 @@ export const WorkspaceNotifications: FC<WorkspaceNotificationsProps> = ({
 				<Notifications
 					items={warningNotifications}
 					severity="warning"
-					icon={<TriangleAlertIcon className="size-icon-sm" />}
+					icon={
+						<TriangleAlertIcon aria-hidden="true" className="size-icon-sm" />
+					}
 				/>
 			)}
 		</div>
 	);
 };
 
-export const findTroubleshootingURL = (
+const findTroubleshootingURL = (
 	workspaceBuild: WorkspaceBuild,
 ): string | undefined => {
 	for (const resource of workspaceBuild.resources) {
@@ -274,4 +292,25 @@ export const findTroubleshootingURL = (
 		}
 	}
 	return undefined;
+};
+
+/**
+ * Returns true when every failing agent's lifecycle state is "start_error",
+ * meaning the agent process is running but a startup script exited with an
+ * error. Restarting the workspace will not fix this because the template admin
+ * must correct the startup script.
+ */
+const isStartupScriptFailure = (workspace: Workspace): boolean => {
+	const failingIds = new Set(workspace.health.failing_agents);
+	if (failingIds.size === 0) {
+		return false;
+	}
+	for (const resource of workspace.latest_build.resources) {
+		for (const agent of resource.agents ?? []) {
+			if (failingIds.has(agent.id) && agent.lifecycle_state !== "start_error") {
+				return false;
+			}
+		}
+	}
+	return true;
 };

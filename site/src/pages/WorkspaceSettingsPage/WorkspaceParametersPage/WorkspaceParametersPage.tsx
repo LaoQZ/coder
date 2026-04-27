@@ -185,7 +185,7 @@ export const WorkspaceParametersPageView: FC<
 								</a>
 							</Button>
 						}
-						className="border border-solid border-border rounded-lg"
+						className="border border-solid rounded-lg"
 					/>
 				)
 			) : (

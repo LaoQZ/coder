@@ -1,14 +1,18 @@
-import { type FC, Profiler, type ReactNode, useEffect } from "react";
+import { type FC, Profiler, type ReactNode, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { UrlTransform } from "streamdown";
 import type * as TypesGen from "#/api/typesGenerated";
-import { useDashboard } from "#/modules/dashboard/useDashboard";
+import { cn } from "#/utils/cn";
+import { useChatDraftAttachments } from "../hooks/useChatDraftAttachments";
+import { chatWidthClass, useChatFullWidth } from "../hooks/useChatFullWidth";
 import { useFileAttachments } from "../hooks/useFileAttachments";
+import { getChatFileURL } from "../utils/chatAttachments";
 import type { ChatDetailError } from "../utils/usageLimitMessage";
 import {
 	AgentChatInput,
 	type AttachedWorkspaceInfo,
 	type ChatMessageInputRef,
+	isUploadInProgress,
 	type UploadState,
 } from "./AgentChatInput";
 import { ConversationTimeline } from "./ChatConversation/ConversationTimeline";
@@ -24,8 +28,7 @@ import {
 } from "./ChatConversation/chatStore";
 import { LiveStreamTail } from "./ChatConversation/LiveStreamTail";
 import {
-	buildComputerUseSubagentIds,
-	buildSubagentTitles,
+	buildSubagentMaps,
 	getEditableUserMessagePayload,
 	parseMessagesWithMergedTools,
 } from "./ChatConversation/messageParsing";
@@ -48,6 +51,8 @@ interface ChatPageTimelineProps {
 		fileBlocks?: readonly TypesGen.ChatMessagePart[],
 	) => void;
 	editingMessageId?: number | null;
+	onImplementPlan?: () => Promise<void> | void;
+	onSendAskUserQuestionResponse?: (message: string) => Promise<void> | void;
 	urlTransform?: UrlTransform;
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 }
@@ -58,11 +63,17 @@ export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
 	persistedError,
 	onEditUserMessage,
 	editingMessageId,
+	onImplementPlan,
+	onSendAskUserQuestionResponse,
 	urlTransform,
 	mcpServers,
 }) => {
+	const [chatFullWidth] = useChatFullWidth();
 	const messagesByID = useChatSelector(store, selectMessagesByID);
 	const orderedMessageIDs = useChatSelector(store, selectOrderedMessageIDs);
+	const chatStatus = useChatSelector(store, selectChatStatus);
+	const hasStream = useChatSelector(store, selectHasStreamState);
+	const isChatCompleted = !hasStream && chatStatus !== "pending";
 
 	const messages = orderedMessageIDs
 		.map((messageID) => {
@@ -78,15 +89,18 @@ export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
 		})
 		.filter(isChatMessage);
 	const parsedMessages = parseMessagesWithMergedTools(messages);
-	const subagentTitles = buildSubagentTitles(parsedMessages);
-	const computerUseSubagentIds = buildComputerUseSubagentIds(parsedMessages);
+	const { titles: subagentTitles, variants: subagentVariants } =
+		buildSubagentMaps(parsedMessages);
 	const onRenderProfiler = useOnRenderProfiler();
 
 	return (
 		<Profiler id="AgentChat" onRender={onRenderProfiler}>
 			<div
 				data-testid="chat-timeline-wrapper"
-				className="mx-auto flex w-full max-w-3xl flex-col gap-2 py-6"
+				className={cn(
+					"mx-auto flex w-full flex-col gap-2 py-6",
+					chatWidthClass(chatFullWidth),
+				)}
 			>
 				{/* VNC sessions for completed agents may already be
 					   terminated, so inline desktop previews are disabled
@@ -96,11 +110,14 @@ export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
 				<ConversationTimeline
 					parsedMessages={parsedMessages}
 					subagentTitles={subagentTitles}
+					subagentVariants={subagentVariants}
 					onEditUserMessage={onEditUserMessage}
 					editingMessageId={editingMessageId}
+					onImplementPlan={onImplementPlan}
+					onSendAskUserQuestionResponse={onSendAskUserQuestionResponse}
+					isChatCompleted={isChatCompleted}
 					urlTransform={urlTransform}
 					mcpServers={mcpServers}
-					computerUseSubagentIds={computerUseSubagentIds}
 					showDesktopPreviews={false}
 				/>
 				<LiveStreamTail
@@ -109,7 +126,7 @@ export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
 					startingResetKey={chatID}
 					isTranscriptEmpty={parsedMessages.length === 0}
 					subagentTitles={subagentTitles}
-					computerUseSubagentIds={computerUseSubagentIds}
+					subagentVariants={subagentVariants}
 					urlTransform={urlTransform}
 					mcpServers={mcpServers}
 				/>
@@ -124,6 +141,8 @@ export type PendingAttachment = {
 };
 
 interface ChatPageInputProps {
+	// Organization that owns this chat. Used to scope file uploads.
+	organizationId: string | undefined;
 	store: ChatStoreHandle;
 	compressionThreshold: number | undefined;
 	onSend: (
@@ -142,6 +161,8 @@ interface ChatPageInputProps {
 	modelOptions: readonly ModelSelectorOption[];
 	modelSelectorPlaceholder: string;
 	modelSelectorHelp?: ReactNode;
+	planModeEnabled?: boolean;
+	onPlanModeToggle?: (enabled: boolean) => void;
 	isModelCatalogLoading?: boolean;
 	// Imperative editor handle plus the one-time initial draft,
 	// owned by the conversation component.
@@ -154,6 +175,7 @@ interface ChatPageInputProps {
 		serializedEditorState: string,
 		hasFileReferences: boolean,
 	) => void;
+	isEditing: boolean;
 	editingQueuedMessageID: number | null;
 	onStartQueueEdit: (
 		id: number,
@@ -177,10 +199,20 @@ interface ChatPageInputProps {
 	onMCPSelectionChange?: (ids: string[]) => void;
 	onMCPAuthComplete?: (serverId: string) => void;
 	lastInjectedContext?: readonly TypesGen.ChatMessagePart[];
+	workspaceOptions: readonly TypesGen.Workspace[];
+	selectedWorkspaceId: string | null;
+	onWorkspaceChange: (workspaceId: string | null) => void;
+	isWorkspaceLoading: boolean;
+	workspace?: TypesGen.Workspace;
+	workspaceAgent?: TypesGen.WorkspaceAgent;
+	chatId?: string;
+	sshCommand?: string;
 	attachedWorkspace?: AttachedWorkspaceInfo;
+	folder?: string;
 }
 
 export const ChatPageInput: FC<ChatPageInputProps> = ({
+	organizationId,
 	store,
 	compressionThreshold,
 	onSend,
@@ -196,12 +228,15 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	modelOptions,
 	modelSelectorPlaceholder,
 	modelSelectorHelp,
+	planModeEnabled,
+	onPlanModeToggle,
 	isModelCatalogLoading = false,
 	inputRef,
 	initialValue,
 	initialEditorState,
 	remountKey,
 	onContentChange,
+	isEditing,
 	editingQueuedMessageID,
 	onStartQueueEdit,
 	onCancelQueueEdit,
@@ -214,7 +249,16 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	onMCPSelectionChange,
 	onMCPAuthComplete,
 	lastInjectedContext,
+	workspaceOptions,
+	selectedWorkspaceId,
+	onWorkspaceChange,
+	isWorkspaceLoading,
+	workspace,
+	workspaceAgent,
+	chatId,
+	sshCommand,
 	attachedWorkspace,
+	folder,
 }) => {
 	const messagesByID = useChatSelector(store, selectMessagesByID);
 	const orderedMessageIDs = useChatSelector(store, selectOrderedMessageIDs);
@@ -257,8 +301,16 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	const latestContextUsage = rawUsage
 		? { ...rawUsage, compressionThreshold, lastInjectedContext }
 		: rawUsage;
-	const { organizations } = useDashboard();
-	const organizationId = organizations[0]?.id;
+	const composeAttachments = useChatDraftAttachments(organizationId, chatId);
+	const editAttachments = useFileAttachments(organizationId);
+	const {
+		setAttachments: setEditAttachments,
+		setPreviewUrls: setEditPreviewUrls,
+		setUploadStates: setEditUploadStates,
+		resetAttachments: resetEditAttachments,
+	} = editAttachments;
+	const wasEditingRef = useRef(isEditing);
+	const modeAttachments = isEditing ? editAttachments : composeAttachments;
 	const {
 		attachments,
 		textContents,
@@ -266,19 +318,32 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 		previewUrls,
 		handleAttach,
 		handleRemoveAttachment,
-		resetAttachments,
-		setAttachments,
-		setPreviewUrls,
-		setUploadStates,
-	} = useFileAttachments(organizationId);
-	// Pre-populate attachments from existing file blocks when
-	// entering edit mode on a message with images.
+	} = modeAttachments;
+
+	// Edit attachments are scoped to the chat being edited, not the compose
+	// draft. Clear them when navigation changes the chat scope.
+	const editScopeRef = useRef({ organizationId, chatId });
+
 	useEffect(() => {
+		const previous = editScopeRef.current;
+		const scopeChanged =
+			previous.organizationId !== organizationId || previous.chatId !== chatId;
+		editScopeRef.current = { organizationId, chatId };
+		if (scopeChanged) {
+			resetEditAttachments();
+		}
+	}, [organizationId, chatId, resetEditAttachments]);
+
+	// Pre-populate the edit bucket from existing file blocks only
+	// while explicitly editing a message.
+	useEffect(() => {
+		if (!isEditing) {
+			return;
+		}
 		if (!editingFileBlocks || editingFileBlocks.length === 0) {
-			// Clear attachments when exiting edit mode.
-			setAttachments([]);
-			setUploadStates(new Map());
-			setPreviewUrls(new Map());
+			setEditAttachments([]);
+			setEditUploadStates(new Map());
+			setEditPreviewUrls(new Map());
 			return;
 		}
 		const fileBlocks = editingFileBlocks.filter(
@@ -291,13 +356,10 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 			// read because the existing file_id is reused at send time.
 			return new File([], `attachment-${i}.${ext}`, { type: mt });
 		});
-		setAttachments(files);
-		setPreviewUrls(
+		setEditAttachments(files);
+		setEditPreviewUrls(
 			new Map(
-				files.map((f, i) => [
-					f,
-					`/api/experimental/chats/files/${fileBlocks[i].file_id}`,
-				]),
+				files.map((f, i) => [f, getChatFileURL(fileBlocks[i].file_id ?? "")]),
 			),
 		);
 		const newUploadStates = new Map<File, UploadState>();
@@ -310,8 +372,23 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 				});
 			}
 		}
-		setUploadStates(newUploadStates);
-	}, [editingFileBlocks, setAttachments, setPreviewUrls, setUploadStates]);
+		setEditUploadStates(newUploadStates);
+	}, [
+		isEditing,
+		editingFileBlocks,
+		setEditAttachments,
+		setEditPreviewUrls,
+		setEditUploadStates,
+	]);
+
+	// Exiting edit mode should only clear the edit bucket. Compose draft
+	// attachments must survive canceling or completing an edit.
+	useEffect(() => {
+		if (wasEditingRef.current && !isEditing) {
+			resetEditAttachments();
+		}
+		wasEditingRef.current = isEditing;
+	}, [isEditing, resetEditAttachments]);
 
 	const isStreaming =
 		hasStreamState || chatStatus === "running" || chatStatus === "pending";
@@ -320,6 +397,13 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 		<AgentChatInput
 			onSend={(message) => {
 				void (async () => {
+					const hasActiveUploads = attachments.some((file) =>
+						isUploadInProgress(uploadStates.get(file)),
+					);
+					if (hasActiveUploads) {
+						toast.warning("Wait for file uploads to finish before sending.");
+						return;
+					}
 					// Collect uploaded attachment metadata for the optimistic
 					// transcript builder while keeping the server payload
 					// shape unchanged downstream.
@@ -351,7 +435,11 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 						// Attachments preserved for retry on failure.
 						return;
 					}
-					resetAttachments();
+					if (isEditing) {
+						editAttachments.resetAttachments();
+					} else {
+						composeAttachments.resetAttachments();
+					}
 				})();
 			}}
 			attachments={attachments}
@@ -385,12 +473,23 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 			onModelChange={onModelChange}
 			modelOptions={modelOptions}
 			modelSelectorPlaceholder={modelSelectorPlaceholder}
+			planModeEnabled={planModeEnabled}
+			onPlanModeToggle={onPlanModeToggle}
 			isModelCatalogLoading={isModelCatalogLoading}
+			workspaceOptions={workspaceOptions}
+			selectedWorkspaceId={selectedWorkspaceId}
+			onWorkspaceChange={onWorkspaceChange}
+			isWorkspaceLoading={isWorkspaceLoading}
 			mcpServers={mcpServers}
 			selectedMCPServerIds={selectedMCPServerIds}
 			onMCPSelectionChange={onMCPSelectionChange}
 			onMCPAuthComplete={onMCPAuthComplete}
+			workspace={workspace}
+			workspaceAgent={workspaceAgent}
+			chatId={chatId}
+			sshCommand={sshCommand}
 			attachedWorkspace={attachedWorkspace}
+			folder={folder}
 		/>
 	);
 
@@ -401,9 +500,11 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	return (
 		<div>
 			{inputElement}
-			<div className="px-3 pt-1 text-2xs text-content-secondary">
-				{modelSelectorHelp}
-			</div>
+			{modelSelectorHelp && (
+				<div className="px-3 pt-1 text-2xs text-content-secondary">
+					{modelSelectorHelp}
+				</div>
+			)}
 		</div>
 	);
 };

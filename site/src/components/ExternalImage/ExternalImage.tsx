@@ -1,8 +1,8 @@
 import { useTheme } from "@emotion/react";
-import type { CSSProperties } from "react";
 import { getExternalImageStylesFromUrl } from "#/theme/externalImages";
 
 export const ExternalImage: React.FC<React.ComponentPropsWithRef<"img">> = ({
+	style,
 	...props
 }) => {
 	// Kept for runtime access to theme.externalImages, which provides
@@ -13,14 +13,11 @@ export const ExternalImage: React.FC<React.ComponentPropsWithRef<"img">> = ({
 	return (
 		// biome-ignore lint/a11y/useAltText: alt should be passed in as a prop
 		<img
-			{...props}
 			style={{
-				...props.style,
-				...(getExternalImageStylesFromUrl(
-					theme.externalImages,
-					props.src,
-				) as CSSProperties),
+				...getExternalImageStylesFromUrl(theme.externalImages, props.src),
+				...style,
 			}}
+			{...props}
 		/>
 	);
 };

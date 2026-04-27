@@ -53,15 +53,18 @@ export const CodeExample: FC<CodeExampleProps> = ({
 	return (
 		<div
 			className={cn(
-				"cursor-pointer flex flex-row items-center text-content-primary font-mono text-[14px] rounded-lg p-2 leading-[150%] border border-solid border-border hover:bg-surface-tertiary",
+				"cursor-pointer flex flex-row items-center",
+				"text-content-primary font-mono text-sm",
+				"rounded-lg p-2 leading-normal border border-solid",
+				"hover:bg-surface-secondary",
 				className,
 			)}
 		>
 			<code
-				className={cn(
-					"px-2 grow break-all",
-					secret && "[-webkit-text-security:disc]",
-				)}
+				className={cn([
+					"px-2 py-0 flex-grow break-all",
+					secret && "[-webkit-text-security:disc]", // also supported by firefox
+				])}
 			>
 				{secret ? (
 					<>

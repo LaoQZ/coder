@@ -26,6 +26,7 @@ curl -X POST https://coder.example.com/api/experimental/chats \
   -H "Coder-Session-Token: $CODER_SESSION_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "organization_id": "<your-org-id>",
     "content": [
       {"type": "text", "text": "hello world"}
     ]
@@ -37,6 +38,7 @@ The response is the newly created `Chat` object:
 ```json
 {
   "id": "a1b2c3d4-...",
+  "organization_id": "...",
   "owner_id": "...",
   "workspace_id": null,
   "build_id": null,
@@ -54,7 +56,8 @@ The response is the newly created `Chat` object:
   "pin_order": 0,
   "mcp_server_ids": [],
   "labels": {},
-  "has_unread": false
+  "has_unread": false,
+  "client_type": "api"
 }
 ```
 
@@ -82,10 +85,12 @@ A typical integration follows three steps:
 | Field             | Type                | Required | Description                                     |
 |-------------------|---------------------|----------|-------------------------------------------------|
 | `content`         | `ChatInputPart[]`   | yes      | The user's prompt as one or more content parts. |
+| `organization_id` | `uuid`              | yes      | The organization this chat belongs to.          |
 | `workspace_id`    | `uuid`              | no       | Pin the chat to a specific workspace.           |
 | `model_config_id` | `uuid`              | no       | Override the default model configuration.       |
 | `mcp_server_ids`  | `uuid[]`            | no       | Attach MCP servers to this chat.                |
 | `labels`          | `map[string]string` | no       | Key-value labels for the chat (max 50).         |
+| `client_type`     | `string`            | no       | `"ui"` or `"api"`. Defaults to `"api"`.         |
 
 Each `ChatInputPart` has a `type` field. The simplest form is a text part:
 
@@ -319,11 +324,40 @@ appear in the `files` field on subsequent
 
 ## Chat statuses
 
-| Status      | Meaning                                                      |
-|-------------|--------------------------------------------------------------|
-| `waiting`   | Idle — newly created, finished successfully, or interrupted. |
-| `pending`   | Queued for processing.                                       |
-| `running`   | Agent is actively working.                                   |
-| `paused`    | Agent is paused (e.g. waiting for user input).               |
-| `completed` | Agent finished and the task is complete.                     |
-| `error`     | Agent encountered an error.                                  |
+| Status            | Meaning                                                                      |
+|-------------------|------------------------------------------------------------------------------|
+| `waiting`         | Idle. Newly created, finished successfully, or interrupted.                  |
+| `pending`         | Queued for processing.                                                       |
+| `running`         | Agent is actively working.                                                   |
+| `paused`          | Agent is paused (for example, waiting for user input).                       |
+| `completed`       | Agent finished and the task is complete.                                     |
+| `error`           | Agent encountered an error.                                                  |
+| `requires_action` | Agent invoked a client-provided tool and needs the result before continuing. |
+
+## Configuration
+
+Deployment-wide chat settings are read and written under
+`/api/experimental/chats/config/*`. Reading config requires authentication; writing requires
+deployment-admin privileges.
+
+### Auto-archive window
+
+Chats whose newest non-deleted message is older than
+`auto_archive_days` are automatically archived by a background job.
+Pinned chats and chats belonging to a still-active thread are
+exempt. `0` disables the feature; the default is 90.
+
+```sh
+# Read
+curl -H "Coder-Session-Token: $CODER_SESSION_TOKEN" \
+  https://coder.example.com/api/experimental/chats/config/auto-archive-days
+# { "auto_archive_days": 90 }
+
+# Update
+curl -X PUT -H "Coder-Session-Token: $CODER_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"auto_archive_days": 60}' \
+  https://coder.example.com/api/experimental/chats/config/auto-archive-days
+```
+
+Accepted range: `0` to `3650` (~10 years).
