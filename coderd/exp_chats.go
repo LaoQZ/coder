@@ -3947,6 +3947,7 @@ func (api *API) resolveCreateChatModelConfigID(
 				ctx,
 				"unsupported personal root model override mode, using default model",
 				slog.F("user_id", userID),
+				slog.F("raw_value", raw),
 			)
 		}
 		switch parsed.Mode {
