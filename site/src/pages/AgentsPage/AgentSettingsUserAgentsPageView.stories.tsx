@@ -388,6 +388,70 @@ export const UnavailableSavedModels: Story = {
 	},
 };
 
+export const ModelConfigsError: Story = {
+	args: makeArgs({
+		modelConfigsError: new Error("Failed to load model configs."),
+		overridesData: buildOverridesResponse({
+			root: buildOverride("root", {
+				mode: "model",
+				model_config_id: claudeModelConfig.id,
+				is_set: true,
+			}),
+			general: buildOverride("general", {
+				mode: "model",
+				model_config_id: claudeModelConfig.id,
+				is_set: true,
+			}),
+			explore: buildOverride("explore", {
+				mode: "model",
+				model_config_id: claudeModelConfig.id,
+				is_set: true,
+			}),
+		}),
+	}),
+	play: async ({ canvasElement }) => {
+		const rootSection = await getSection(canvasElement, "Root agent model");
+		const generalSection = await getSection(
+			canvasElement,
+			"General subagent model",
+		);
+		const exploreSection = await getSection(
+			canvasElement,
+			"Explore subagent model",
+		);
+
+		for (const section of [rootSection, generalSection, exploreSection]) {
+			expect(
+				within(section).getByText("Failed to load model configs."),
+			).toBeInTheDocument();
+			expect(within(section).getByRole("combobox")).toBeEnabled();
+		}
+
+		await selectOverride(
+			rootSection,
+			canvasElement,
+			"Root agent model override",
+			"Chat default",
+		);
+		await selectOverride(
+			generalSection,
+			canvasElement,
+			"General subagent model override",
+			"Deployment default",
+		);
+		await selectOverride(
+			exploreSection,
+			canvasElement,
+			"Explore subagent model override",
+			"Chat default",
+		);
+
+		expect(rootSection).toHaveTextContent("Chat default");
+		expect(generalSection).toHaveTextContent("Deployment default");
+		expect(exploreSection).toHaveTextContent("Chat default");
+	},
+};
+
 export const LoadingState: Story = {
 	args: makeArgs({
 		overridesData: undefined,

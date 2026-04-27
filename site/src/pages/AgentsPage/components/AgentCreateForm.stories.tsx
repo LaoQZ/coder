@@ -232,6 +232,33 @@ export const RootOverrideMissingFromCatalog: Story = {
 	},
 };
 
+export const MalformedRootOverrideUsesDefaultModel: Story = {
+	args: {
+		...defaultArgs,
+		onCreateChat: fn().mockResolvedValue(undefined),
+		modelConfigs: defaultModelConfigs,
+		rootPersonalModelOverride: buildRootPersonalModelOverride({
+			mode: "model",
+			model_config_id: claudeModelConfigID,
+			is_malformed: true,
+		}),
+	},
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement);
+		expect(
+			canvas.getByRole("combobox", { name: "GPT-4o" }),
+		).toBeInTheDocument();
+		expect(
+			canvas.queryByRole("combobox", { name: "Claude Sonnet 4" }),
+		).not.toBeInTheDocument();
+		await submitMessage(canvasElement, "create with malformed root model");
+		await waitFor(() => {
+			expect(args.onCreateChat).toHaveBeenCalled();
+		});
+		expect(getCreateOptions(args.onCreateChat).model).toBe(modelConfigID);
+	},
+};
+
 export const LastUsedModelFallbackWithoutRootOverride: Story = {
 	args: {
 		...defaultArgs,
