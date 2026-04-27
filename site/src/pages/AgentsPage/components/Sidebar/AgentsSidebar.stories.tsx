@@ -1650,6 +1650,33 @@ export const SettingsUserAgentsFeatureDisabled: Story = {
 	},
 };
 
+export const SettingsUserAgentsOverridesLoading: Story = {
+	args: {
+		chats: [],
+		isAdmin: false,
+		isPersonalModelOverridesEnabled: undefined,
+	},
+	parameters: {
+		queries: [
+			{
+				key: userChatProviderConfigsKey,
+				data: [],
+			},
+		],
+		reactRouter: reactRouterParameters({
+			location: { path: "/agents/settings/general" },
+			routing: settingsRouting,
+		}),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(canvas.getByRole("link", { name: "General" })).toBeInTheDocument();
+		expect(
+			canvas.queryByRole("link", { name: "Agents" }),
+		).not.toBeInTheDocument();
+	},
+};
+
 export const SettingsUserAgentsAdmin: Story = {
 	args: {
 		chats: [],

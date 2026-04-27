@@ -845,7 +845,7 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 		archivedFilter,
 		onArchivedFilterChange,
 		onCollapse,
-		isPersonalModelOverridesEnabled = true,
+		isPersonalModelOverridesEnabled = false,
 		isAdmin = false,
 	} = props;
 	const { agentId, chatId } = useParams<{

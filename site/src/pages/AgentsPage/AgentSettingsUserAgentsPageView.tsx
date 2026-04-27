@@ -359,9 +359,7 @@ const PersonalModelOverrideRow: FC<PersonalModelOverrideRowProps> = ({
 									value={modelSelectionValue(option.id)}
 								>
 									<span className="flex flex-col">
-										<span>
-											{option.displayName || option.model || option.id}
-										</span>
+										<span>{option.displayName}</span>
 										<span className="text-content-secondary text-[11px] leading-tight">
 											via {formatProviderLabel(option.provider)}
 										</span>
