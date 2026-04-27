@@ -1,5 +1,9 @@
 import type { FC } from "react";
 import type * as TypesGen from "#/api/typesGenerated";
+import {
+	AdminPersonalModelOverridesSettings,
+	type SavePersonalModelOverridesAdminSetting,
+} from "./components/AdminPersonalModelOverridesSettings";
 import { SectionHeader } from "./components/SectionHeader";
 import {
 	type MutationCallbacks,
@@ -12,6 +16,13 @@ type SaveModelOverride = (
 ) => void;
 
 export interface AgentSettingsAgentsPageViewProps {
+	personalModelOverridesAdminSettingsData?: TypesGen.ChatPersonalModelOverridesAdminSettings;
+	personalModelOverridesAdminSettingsError?: unknown;
+	onRetryPersonalModelOverridesAdminSettings?: () => void;
+	isRetryingPersonalModelOverridesAdminSettings?: boolean;
+	onSavePersonalModelOverridesAdminSettings: SavePersonalModelOverridesAdminSetting;
+	isSavingPersonalModelOverridesAdminSettings: boolean;
+	isSavePersonalModelOverridesAdminSettingsError: boolean;
 	generalModelOverrideData?: TypesGen.ChatAgentModelOverrideResponse;
 	exploreModelOverrideData?: TypesGen.ChatAgentModelOverrideResponse;
 	modelConfigsData: TypesGen.ChatModelConfig[] | undefined;
@@ -28,6 +39,13 @@ export interface AgentSettingsAgentsPageViewProps {
 export const AgentSettingsAgentsPageView: FC<
 	AgentSettingsAgentsPageViewProps
 > = ({
+	personalModelOverridesAdminSettingsData,
+	personalModelOverridesAdminSettingsError,
+	onRetryPersonalModelOverridesAdminSettings,
+	isRetryingPersonalModelOverridesAdminSettings,
+	onSavePersonalModelOverridesAdminSettings,
+	isSavingPersonalModelOverridesAdminSettings,
+	isSavePersonalModelOverridesAdminSettingsError,
 	generalModelOverrideData,
 	exploreModelOverrideData,
 	modelConfigsData,
@@ -54,6 +72,15 @@ export const AgentSettingsAgentsPageView: FC<
 			<SectionHeader
 				label="Agents"
 				description="Configure defaults for delegated agents and other agent-specific capabilities."
+			/>
+			<AdminPersonalModelOverridesSettings
+				adminSettings={personalModelOverridesAdminSettingsData}
+				adminSettingsError={personalModelOverridesAdminSettingsError}
+				onRetryAdminSettings={onRetryPersonalModelOverridesAdminSettings}
+				isRetryingAdminSettings={isRetryingPersonalModelOverridesAdminSettings}
+				onSaveAdminSetting={onSavePersonalModelOverridesAdminSettings}
+				isSavingAdminSetting={isSavingPersonalModelOverridesAdminSettings}
+				isSaveAdminSettingError={isSavePersonalModelOverridesAdminSettingsError}
 			/>
 			{showGeneralModelSection && onSaveGeneralModelOverride && (
 				<section aria-label="General model" className="flex flex-col gap-3">

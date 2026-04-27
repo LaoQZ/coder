@@ -1387,6 +1387,13 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 							state={location.state}
 						/>
 						<SettingsNavItem
+							icon={BotIcon}
+							label="Agents"
+							active={settingsSection === "user-agents"}
+							to="/agents/settings/user-agents"
+							state={location.state}
+						/>
+						<SettingsNavItem
 							icon={ShrinkIcon}
 							label="Compaction"
 							active={settingsSection === "compaction"}
