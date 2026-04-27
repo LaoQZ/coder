@@ -284,10 +284,10 @@ WHERE
     AND deleted = false
     AND role = 'user'
     AND visibility = 'model'
-    AND content = jsonb_build_array(jsonb_build_object(
-        'type', 'text',
-        'text', @message_text::text
-    ))
+    AND jsonb_typeof(content) = 'array'
+    AND jsonb_array_length(content) = 1
+    AND content->0->>'type' = 'text'
+    AND content->0->>'text' = @message_text::text
 ORDER BY
     id ASC;
 
