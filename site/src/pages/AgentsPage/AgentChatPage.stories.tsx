@@ -714,6 +714,81 @@ export const ClearCommandResult: Story = {
 	},
 };
 
+export const RemoteContextClearedEvent: Story = {
+	parameters: {
+		queries: buildQueries(
+			{
+				id: CHAT_ID,
+				...baseChatFields,
+				title: "Remote clear event",
+				status: "completed",
+			},
+			{
+				messages: [
+					{
+						id: 1,
+						chat_id: CHAT_ID,
+						created_at: "2026-02-18T00:00:00.000Z",
+						role: "user",
+						content: [{ type: "text", text: "Visible history" }],
+					},
+				],
+				queued_messages: [],
+				has_more: false,
+			},
+			{ diffUrl: undefined },
+		),
+		webSocket: {
+			"/chats/": [
+				{
+					event: "message",
+					data: JSON.stringify([
+						{
+							type: "context_cleared",
+							chat_id: CHAT_ID,
+							context_cleared: { chat_id: CHAT_ID },
+						},
+					] satisfies TypesGen.ChatStreamEvent[]),
+				},
+			],
+		},
+	},
+	beforeEach: () => {
+		spyOn(API.experimental, "getChatMessages").mockResolvedValue({
+			messages: [
+				{
+					id: 1,
+					chat_id: CHAT_ID,
+					created_at: "2026-02-18T00:00:00.000Z",
+					role: "user",
+					content: [{ type: "text", text: "Visible history" }],
+				},
+			],
+			queued_messages: [],
+			context_clears: [
+				{
+					id: 2,
+					chat_id: CHAT_ID,
+					created_at: "2026-02-18T00:00:01.000Z",
+				},
+			],
+			has_more: false,
+		});
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await waitFor(() => {
+			expect(API.experimental.getChatMessages).toHaveBeenCalledWith(
+				CHAT_ID,
+				expect.objectContaining({ limit: 50 }),
+			);
+		});
+		await waitFor(() => {
+			expect(canvas.getByText("Context cleared")).toBeInTheDocument();
+		});
+	},
+};
+
 export const PlanModeFromChatState: Story = {
 	parameters: {
 		queries: buildQueries(

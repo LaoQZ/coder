@@ -2448,6 +2448,9 @@ const (
 	clearChatBusyMessage              = "Wait for the chat to finish or interrupt it before clearing context."
 )
 
+// clearChatCommandErrorResponse gives the web UI command context for toasts.
+// Go SDK callers still receive the embedded Response fields through
+// codersdk.Error because command error metadata is experimental UI behavior.
 type clearChatCommandErrorResponse struct {
 	codersdk.Response
 	Command string `json:"command,omitempty"`

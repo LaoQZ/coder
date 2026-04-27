@@ -5775,6 +5775,9 @@ type GetChatContextClearMessagesByChatIDParams struct {
 	MessageText string    `db:"message_text" json:"message_text"`
 }
 
+// The marker text is schema-bound to chatd.ClearChatContextMessageText. It
+// distinguishes clear boundaries from other compressed model-only messages.
+// Do not change it without preserving historical marker visibility.
 func (q *sqlQuerier) GetChatContextClearMessagesByChatID(ctx context.Context, arg GetChatContextClearMessagesByChatIDParams) ([]ChatMessage, error) {
 	rows, err := q.db.QueryContext(ctx, getChatContextClearMessagesByChatID, arg.ChatID, arg.MessageText)
 	if err != nil {

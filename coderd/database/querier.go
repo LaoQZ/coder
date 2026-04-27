@@ -275,6 +275,9 @@ type sqlcQuerier interface {
 	GetChatAutoArchiveDays(ctx context.Context, defaultAutoArchiveDays int32) (int32, error)
 	GetChatByID(ctx context.Context, id uuid.UUID) (Chat, error)
 	GetChatByIDForUpdate(ctx context.Context, id uuid.UUID) (Chat, error)
+	// The marker text is schema-bound to chatd.ClearChatContextMessageText. It
+	// distinguishes clear boundaries from other compressed model-only messages.
+	// Do not change it without preserving historical marker visibility.
 	GetChatContextClearMessagesByChatID(ctx context.Context, arg GetChatContextClearMessagesByChatIDParams) ([]ChatMessage, error)
 	// Per-root-chat cost breakdown for a single user within a date range.
 	// Groups by root_chat_id so forked chats roll up under their root.

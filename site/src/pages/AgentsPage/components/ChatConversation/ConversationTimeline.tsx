@@ -981,6 +981,7 @@ interface ConversationTimelineProps {
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 	showDesktopPreviews?: boolean;
 	isTurnActive?: boolean;
+	// Ordered by ascending message ID by AgentChatPage.
 	contextClears?: readonly TypesGen.ChatContextClear[];
 }
 
@@ -1000,9 +1001,8 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 		contextClears = [],
 	}) => {
 		const lastInChainFlags = computeLastInChainFlags(parsedMessages);
-		const sortedContextClears = [...contextClears].sort((a, b) => a.id - b.id);
 
-		if (parsedMessages.length === 0 && sortedContextClears.length === 0) {
+		if (parsedMessages.length === 0 && contextClears.length === 0) {
 			return null;
 		}
 
@@ -1106,8 +1106,8 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 			if (!entry) {
 				continue;
 			}
-			while (nextContextClearIndex < sortedContextClears.length) {
-				const contextClear = sortedContextClears[nextContextClearIndex];
+			while (nextContextClearIndex < contextClears.length) {
+				const contextClear = contextClears[nextContextClearIndex];
 				if (!contextClear || contextClear.id >= entry.message.id) {
 					break;
 				}
@@ -1118,8 +1118,8 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 			}
 			timelineNodes.push(renderMessageEntry(entry, msgIdx));
 		}
-		while (nextContextClearIndex < sortedContextClears.length) {
-			const contextClear = sortedContextClears[nextContextClearIndex];
+		while (nextContextClearIndex < contextClears.length) {
+			const contextClear = contextClears[nextContextClearIndex];
 			if (!contextClear) {
 				break;
 			}

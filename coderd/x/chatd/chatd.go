@@ -1357,6 +1357,9 @@ func (p *Server) SendMessage(
 }
 
 // ClearChatContextMessageText is the marker stored in hidden clear boundaries.
+// Treat this text as schema-bound. GetChatContextClearMessagesByChatID uses it
+// to distinguish clear markers from other compressed model-only messages, so
+// changing it would hide dividers for previously cleared chats.
 const ClearChatContextMessageText = "Previous chat context was cleared by the user."
 
 // ClearChatContext inserts a hidden compressed boundary so future prompt
