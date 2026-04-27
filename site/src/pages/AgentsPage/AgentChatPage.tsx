@@ -1394,8 +1394,13 @@ const AgentChatPage: FC = () => {
 		try {
 			response = await sendMessage(request);
 		} catch (error) {
-			if (commandName) {
-				toast.error(getErrorMessage(error, `Failed to run /${commandName}.`));
+			const errorCommandName = isApiError(error)
+				? error.response.data.command || commandName
+				: commandName;
+			if (errorCommandName) {
+				toast.error(
+					getErrorMessage(error, `Failed to run /${errorCommandName}.`),
+				);
 			} else {
 				handleUsageLimitError(error);
 			}

@@ -2448,6 +2448,11 @@ const (
 	clearChatBusyMessage              = "Wait for the chat to finish or interrupt it before clearing context."
 )
 
+type clearChatCommandErrorResponse struct {
+	codersdk.Response
+	Command string `json:"command,omitempty"`
+}
+
 type clearChatCommandMatch int
 
 const (
@@ -2533,17 +2538,22 @@ func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 		if clearErr != nil {
 			switch {
 			case xerrors.Is(clearErr, chatd.ErrChatArchived):
-				httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
-					Message: "Cannot send messages to an archived chat.",
+				httpapi.Write(ctx, rw, http.StatusBadRequest, clearChatCommandErrorResponse{
+					Response: codersdk.Response{Message: "Cannot send messages to an archived chat."},
+					Command:  clearChatCommandName,
 				})
 			case xerrors.Is(clearErr, chatd.ErrChatNotIdle):
-				httpapi.Write(ctx, rw, http.StatusConflict, codersdk.Response{
-					Message: clearChatBusyMessage,
+				httpapi.Write(ctx, rw, http.StatusConflict, clearChatCommandErrorResponse{
+					Response: codersdk.Response{Message: clearChatBusyMessage},
+					Command:  clearChatCommandName,
 				})
 			default:
-				httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
-					Message: "Failed to clear chat context.",
-					Detail:  clearErr.Error(),
+				httpapi.Write(ctx, rw, http.StatusInternalServerError, clearChatCommandErrorResponse{
+					Response: codersdk.Response{
+						Message: "Failed to clear chat context.",
+						Detail:  clearErr.Error(),
+					},
+					Command: clearChatCommandName,
 				})
 			}
 			return
@@ -2556,8 +2566,9 @@ func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case clearChatCommandInvalid:
-		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
-			Message: clearChatCommandValidationMessage,
+		httpapi.Write(ctx, rw, http.StatusBadRequest, clearChatCommandErrorResponse{
+			Response: codersdk.Response{Message: clearChatCommandValidationMessage},
+			Command:  clearChatCommandName,
 		})
 		return
 	}
