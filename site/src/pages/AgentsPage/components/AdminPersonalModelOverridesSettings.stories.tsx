@@ -4,6 +4,9 @@ import { AdminPersonalModelOverridesSettings } from "./AdminPersonalModelOverrid
 
 const baseArgs = {
 	adminSettings: { allow_users: false },
+	adminSettingsError: undefined,
+	onRetryAdminSettings: fn(),
+	isRetryingAdminSettings: false,
 	onSaveAdminSetting: fn(),
 	isSavingAdminSetting: false,
 	isSaveAdminSettingError: false,
@@ -51,6 +54,26 @@ export const LoadingState: Story = {
 			}),
 		).toBeDisabled();
 		expect(canvas.getByRole("button", { name: "Save" })).toBeDisabled();
+	},
+};
+
+export const LoadError: Story = {
+	args: {
+		adminSettings: undefined,
+		adminSettingsError: new Error("Failed to load personal model overrides."),
+	},
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement);
+
+		expect(
+			await canvas.findByText("Failed to load personal model overrides."),
+		).toBeInTheDocument();
+		expect(
+			canvas.queryByText("Loading personal model override settings..."),
+		).not.toBeInTheDocument();
+		expect(canvas.getByRole("button", { name: "Save" })).toBeDisabled();
+		await userEvent.click(canvas.getByRole("button", { name: "Retry" }));
+		expect(args.onRetryAdminSettings).toHaveBeenCalled();
 	},
 };
 

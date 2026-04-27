@@ -1,6 +1,7 @@
 import { useFormik } from "formik";
 import type { FC } from "react";
 import type * as TypesGen from "#/api/typesGenerated";
+import { ErrorAlert } from "#/components/Alert/ErrorAlert";
 import { Button } from "#/components/Button/Button";
 import { Switch } from "#/components/Switch/Switch";
 
@@ -16,6 +17,9 @@ export type SavePersonalModelOverridesAdminSetting = (
 
 interface AdminPersonalModelOverridesSettingsProps {
 	adminSettings: TypesGen.ChatPersonalModelOverridesAdminSettings | undefined;
+	adminSettingsError?: unknown;
+	onRetryAdminSettings?: () => void;
+	isRetryingAdminSettings?: boolean;
 	onSaveAdminSetting: SavePersonalModelOverridesAdminSetting;
 	isSavingAdminSetting: boolean;
 	isSaveAdminSettingError: boolean;
@@ -25,11 +29,15 @@ export const AdminPersonalModelOverridesSettings: FC<
 	AdminPersonalModelOverridesSettingsProps
 > = ({
 	adminSettings,
+	adminSettingsError,
+	onRetryAdminSettings,
+	isRetryingAdminSettings = false,
 	onSaveAdminSetting,
 	isSavingAdminSetting,
 	isSaveAdminSettingError,
 }) => {
 	const hasLoadedAdminSettings = adminSettings !== undefined;
+	const hasAdminSettingsError = adminSettingsError != null;
 	const form = useFormik({
 		enableReinitialize: true,
 		initialValues: {
@@ -77,10 +85,27 @@ export const AdminPersonalModelOverridesSettings: FC<
 					disabled={isDisabled}
 				/>
 			</div>
-			{!hasLoadedAdminSettings && (
-				<p className="m-0 text-xs text-content-secondary">
-					Loading personal model override settings...
-				</p>
+			{hasAdminSettingsError ? (
+				<div className="flex flex-col gap-2">
+					<ErrorAlert error={adminSettingsError} />
+					{onRetryAdminSettings && (
+						<Button
+							disabled={isRetryingAdminSettings}
+							onClick={onRetryAdminSettings}
+							size="sm"
+							type="button"
+							variant="outline"
+						>
+							Retry
+						</Button>
+					)}
+				</div>
+			) : (
+				!hasLoadedAdminSettings && (
+					<p className="m-0 text-xs text-content-secondary">
+						Loading personal model override settings...
+					</p>
+				)
 			)}
 			<div className="flex justify-end gap-2">
 				<Button size="sm" type="submit" disabled={isDisabled || !form.dirty}>

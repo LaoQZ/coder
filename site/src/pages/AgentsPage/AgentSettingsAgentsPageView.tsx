@@ -17,6 +17,9 @@ type SaveModelOverride = (
 
 export interface AgentSettingsAgentsPageViewProps {
 	personalModelOverridesAdminSettingsData?: TypesGen.ChatPersonalModelOverridesAdminSettings;
+	personalModelOverridesAdminSettingsError?: unknown;
+	onRetryPersonalModelOverridesAdminSettings?: () => void;
+	isRetryingPersonalModelOverridesAdminSettings?: boolean;
 	onSavePersonalModelOverridesAdminSettings: SavePersonalModelOverridesAdminSetting;
 	isSavingPersonalModelOverridesAdminSettings: boolean;
 	isSavePersonalModelOverridesAdminSettingsError: boolean;
@@ -37,6 +40,9 @@ export const AgentSettingsAgentsPageView: FC<
 	AgentSettingsAgentsPageViewProps
 > = ({
 	personalModelOverridesAdminSettingsData,
+	personalModelOverridesAdminSettingsError,
+	onRetryPersonalModelOverridesAdminSettings,
+	isRetryingPersonalModelOverridesAdminSettings,
 	onSavePersonalModelOverridesAdminSettings,
 	isSavingPersonalModelOverridesAdminSettings,
 	isSavePersonalModelOverridesAdminSettingsError,
@@ -69,6 +75,9 @@ export const AgentSettingsAgentsPageView: FC<
 			/>
 			<AdminPersonalModelOverridesSettings
 				adminSettings={personalModelOverridesAdminSettingsData}
+				adminSettingsError={personalModelOverridesAdminSettingsError}
+				onRetryAdminSettings={onRetryPersonalModelOverridesAdminSettings}
+				isRetryingAdminSettings={isRetryingPersonalModelOverridesAdminSettings}
 				onSaveAdminSetting={onSavePersonalModelOverridesAdminSettings}
 				isSavingAdminSetting={isSavingPersonalModelOverridesAdminSettings}
 				isSaveAdminSettingError={isSavePersonalModelOverridesAdminSettingsError}

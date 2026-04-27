@@ -80,6 +80,15 @@ const AgentSettingsAgentsPage: FC = () => {
 				personalModelOverridesAdminSettingsData={
 					personalModelOverridesAdminSettingsQuery.data
 				}
+				personalModelOverridesAdminSettingsError={
+					personalModelOverridesAdminSettingsQuery.error
+				}
+				onRetryPersonalModelOverridesAdminSettings={() => {
+					void personalModelOverridesAdminSettingsQuery.refetch();
+				}}
+				isRetryingPersonalModelOverridesAdminSettings={
+					personalModelOverridesAdminSettingsQuery.isFetching
+				}
 				onSavePersonalModelOverridesAdminSettings={
 					savePersonalModelOverridesAdminSettingsMutation.mutate
 				}

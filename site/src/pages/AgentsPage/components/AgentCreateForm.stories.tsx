@@ -184,7 +184,7 @@ export const RootPersonalModelOverrideModelSelected: Story = {
 	},
 };
 
-export const RootPersonalModelOverrideChatDefaultOmitsModel: Story = {
+export const RootChatDefaultSubmitsDisplayedModel: Story = {
 	args: {
 		...defaultArgs,
 		onCreateChat: fn().mockResolvedValue(undefined),
@@ -203,7 +203,7 @@ export const RootPersonalModelOverrideChatDefaultOmitsModel: Story = {
 		await waitFor(() => {
 			expect(args.onCreateChat).toHaveBeenCalled();
 		});
-		expect(getCreateOptions(args.onCreateChat).model).toBeUndefined();
+		expect(getCreateOptions(args.onCreateChat).model).toBe(modelConfigID);
 	},
 };
 

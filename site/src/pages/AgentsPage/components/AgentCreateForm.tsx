@@ -219,7 +219,7 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 			return rootOverrideModelID;
 		}
 		if (isRootOverrideChatDefault) {
-			return undefined;
+			return selectedModel || undefined;
 		}
 		return selectedModel || undefined;
 	})();
