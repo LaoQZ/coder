@@ -5694,6 +5694,23 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 		model := createChatModelConfig(t, client)
 		chat := createClearCommandTestChat(ctx, t, db, firstUser, model, "clear command", "visible history")
 
+		summaryContent, err := chatprompt.MarshalParts([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("automatic context summary"),
+		})
+		require.NoError(t, err)
+		summaryParams := chatd.BuildSingleChatMessageInsertParams(
+			chat.ID,
+			database.ChatMessageRoleUser,
+			summaryContent,
+			database.ChatMessageVisibilityModel,
+			model.ID,
+			chatprompt.CurrentContentVersion,
+			uuid.Nil,
+		)
+		summaryParams.Compressed[0] = true
+		_, err = db.InsertChatMessages(dbauthz.AsSystemRestricted(ctx), summaryParams)
+		require.NoError(t, err)
+
 		before, err := client.GetChatMessages(ctx, chat.ID, nil)
 		require.NoError(t, err)
 		resp, err := client.CreateChatMessage(ctx, chat.ID, codersdk.CreateChatMessageRequest{
@@ -5716,6 +5733,11 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, before.Messages, after.Messages)
 		require.Equal(t, before.QueuedMessages, after.QueuedMessages)
+		require.Empty(t, before.ContextClears)
+		require.Len(t, after.ContextClears, 1)
+		require.Equal(t, chat.ID, after.ContextClears[0].ChatID)
+		require.NotNil(t, after.ContextClears[0].CreatedBy)
+		require.Equal(t, firstUser.UserID, *after.ContextClears[0].CreatedBy)
 	})
 
 	t.Run("Validation", func(t *testing.T) {

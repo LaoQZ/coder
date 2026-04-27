@@ -1335,6 +1335,17 @@ export interface ChatConfig {
 }
 
 // From codersdk/chats.go
+/**
+ * ChatContextClear marks where a user cleared model context in a chat.
+ */
+export interface ChatContextClear {
+	readonly id: number;
+	readonly chat_id: string;
+	readonly created_by?: string;
+	readonly created_at: string;
+}
+
+// From codersdk/chats.go
 export interface ChatContextFilePart {
 	readonly type: "context-file";
 	/**
@@ -1873,11 +1884,12 @@ export interface ChatMessagesPaginationOptions {
 
 // From codersdk/chats.go
 /**
- * ChatMessagesResponse contains the messages and queued messages for a chat.
+ * ChatMessagesResponse contains messages and queued messages for a chat.
  */
 export interface ChatMessagesResponse {
 	readonly messages: readonly ChatMessage[];
 	readonly queued_messages: readonly ChatQueuedMessage[];
+	readonly context_clears?: readonly ChatContextClear[];
 	readonly has_more: boolean;
 }
 

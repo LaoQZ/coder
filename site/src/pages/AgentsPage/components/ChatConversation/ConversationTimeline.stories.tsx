@@ -329,6 +329,34 @@ export const UserMessageWithSingleImage: Story = {
 	},
 };
 
+export const ContextClearedDivider: Story = {
+	args: {
+		...defaultArgs,
+		contextClears: [
+			{
+				id: 2,
+				chat_id: baseMessage.chat_id,
+				created_at: "2026-03-10T00:01:00.000Z",
+			},
+		],
+		parsedMessages: buildMessages([
+			buildUserMessage({ id: 1, text: "What changed before the reset?" }),
+			{
+				...baseMessage,
+				id: 3,
+				role: "assistant",
+				content: [
+					buildTextPart("Only messages after the divider are in context."),
+				],
+			},
+		]),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(canvas.getByText("Context cleared")).toBeInTheDocument();
+	},
+};
+
 /** Ensures N images in yields exactly N thumbnails with no duplication. */
 export const UserMessageWithMultipleImages: Story = {
 	args: {

@@ -5751,6 +5751,75 @@ func (q *sqlQuerier) GetChatByIDForUpdate(ctx context.Context, id uuid.UUID) (Ch
 	return i, err
 }
 
+const getChatContextClearMessagesByChatID = `-- name: GetChatContextClearMessagesByChatID :many
+SELECT
+    id, chat_id, model_config_id, created_at, role, content, visibility, input_tokens, output_tokens, total_tokens, reasoning_tokens, cache_creation_tokens, cache_read_tokens, context_limit, compressed, created_by, content_version, total_cost_micros, runtime_ms, deleted, provider_response_id
+FROM
+    chat_messages
+WHERE
+    chat_id = $1::uuid
+    AND compressed = true
+    AND deleted = false
+    AND role = 'user'
+    AND visibility = 'model'
+    AND content = jsonb_build_array(jsonb_build_object(
+        'type', 'text',
+        'text', $2::text
+    ))
+ORDER BY
+    id ASC
+`
+
+type GetChatContextClearMessagesByChatIDParams struct {
+	ChatID      uuid.UUID `db:"chat_id" json:"chat_id"`
+	MessageText string    `db:"message_text" json:"message_text"`
+}
+
+func (q *sqlQuerier) GetChatContextClearMessagesByChatID(ctx context.Context, arg GetChatContextClearMessagesByChatIDParams) ([]ChatMessage, error) {
+	rows, err := q.db.QueryContext(ctx, getChatContextClearMessagesByChatID, arg.ChatID, arg.MessageText)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatMessage
+	for rows.Next() {
+		var i ChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ModelConfigID,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.Visibility,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.TotalTokens,
+			&i.ReasoningTokens,
+			&i.CacheCreationTokens,
+			&i.CacheReadTokens,
+			&i.ContextLimit,
+			&i.Compressed,
+			&i.CreatedBy,
+			&i.ContentVersion,
+			&i.TotalCostMicros,
+			&i.RuntimeMs,
+			&i.Deleted,
+			&i.ProviderResponseID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getChatCostPerChat = `-- name: GetChatCostPerChat :many
 WITH chat_costs AS (
     SELECT

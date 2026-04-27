@@ -275,6 +275,7 @@ type sqlcQuerier interface {
 	GetChatAutoArchiveDays(ctx context.Context, defaultAutoArchiveDays int32) (int32, error)
 	GetChatByID(ctx context.Context, id uuid.UUID) (Chat, error)
 	GetChatByIDForUpdate(ctx context.Context, id uuid.UUID) (Chat, error)
+	GetChatContextClearMessagesByChatID(ctx context.Context, arg GetChatContextClearMessagesByChatIDParams) ([]ChatMessage, error)
 	// Per-root-chat cost breakdown for a single user within a date range.
 	// Groups by root_chat_id so forked chats roll up under their root.
 	// Only counts assistant-role messages.

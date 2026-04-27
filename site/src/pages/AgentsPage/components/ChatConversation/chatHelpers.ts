@@ -44,9 +44,21 @@ export const extractContextUsageFromMessage = (
 
 export const getLatestContextUsage = (
 	messages: readonly TypesGen.ChatMessage[],
+	contextClears: readonly TypesGen.ChatContextClear[] = [],
 ): AgentContextUsage | null => {
+	const latestClearID = contextClears.reduce(
+		(maxID, clear) => Math.max(maxID, clear.id),
+		0,
+	);
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
-		const usage = extractContextUsageFromMessage(messages[index]);
+		const message = messages[index];
+		if (!message) {
+			continue;
+		}
+		if (latestClearID > 0 && message.id <= latestClearID) {
+			return null;
+		}
+		const usage = extractContextUsageFromMessage(message);
 		if (usage) {
 			return usage;
 		}

@@ -132,6 +132,37 @@ describe("getLatestContextUsage", () => {
 		expect(result).not.toBeNull();
 		expect(result!.inputTokens).toBe(200);
 	});
+
+	it("returns null when the latest usage is before a clear boundary", () => {
+		const messages = [
+			makeMessage({ id: 1, usage: { input_tokens: 50 } }),
+			makeMessage({ id: 3 }),
+		];
+		const result = getLatestContextUsage(messages, [
+			{
+				id: 2,
+				chat_id: "chat-1",
+				created_at: "2025-01-01T00:01:00Z",
+			},
+		]);
+		expect(result).toBeNull();
+	});
+
+	it("returns usage from messages after the latest clear boundary", () => {
+		const messages = [
+			makeMessage({ id: 1, usage: { input_tokens: 50 } }),
+			makeMessage({ id: 3, usage: { input_tokens: 300 } }),
+		];
+		const result = getLatestContextUsage(messages, [
+			{
+				id: 2,
+				chat_id: "chat-1",
+				created_at: "2025-01-01T00:01:00Z",
+			},
+		]);
+		expect(result).not.toBeNull();
+		expect(result!.inputTokens).toBe(300);
+	});
 });
 
 // ---------------------------------------------------------------------------

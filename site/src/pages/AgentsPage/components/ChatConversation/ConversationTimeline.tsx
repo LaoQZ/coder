@@ -3,6 +3,7 @@ import {
 	type FC,
 	Fragment,
 	memo,
+	type ReactNode,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -953,6 +954,16 @@ function computeLastInChainFlags(
 	return flags;
 }
 
+const ContextClearDivider: FC = () => (
+	<div className="flex items-center gap-3 px-3 py-2 text-xs text-content-secondary">
+		<div className="h-px flex-1 bg-border-default" />
+		<span className="rounded-full border border-border-default bg-surface-secondary px-2 py-1">
+			Context cleared
+		</span>
+		<div className="h-px flex-1 bg-border-default" />
+	</div>
+);
+
 interface ConversationTimelineProps {
 	parsedMessages: readonly ParsedMessageEntry[];
 	subagentTitles: Map<string, string>;
@@ -970,6 +981,7 @@ interface ConversationTimelineProps {
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 	showDesktopPreviews?: boolean;
 	isTurnActive?: boolean;
+	contextClears?: readonly TypesGen.ChatContextClear[];
 }
 
 export const ConversationTimeline = memo<ConversationTimelineProps>(
@@ -985,10 +997,12 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 		urlTransform,
 		mcpServers,
 		showDesktopPreviews,
+		contextClears = [],
 	}) => {
 		const lastInChainFlags = computeLastInChainFlags(parsedMessages);
+		const sortedContextClears = [...contextClears].sort((a, b) => a.id - b.id);
 
-		if (parsedMessages.length === 0) {
+		if (parsedMessages.length === 0 && sortedContextClears.length === 0) {
 			return null;
 		}
 
@@ -1044,54 +1058,84 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 				? askUserQuestionResponseTextByToolId
 				: undefined;
 
+		const renderMessageEntry = (
+			{ message, parsed }: ParsedMessageEntry,
+			msgIdx: number,
+		): ReactNode => {
+			if (message.role === "user") {
+				return (
+					<StickyUserMessage
+						key={message.id}
+						message={message}
+						parsed={parsed}
+						onEditUserMessage={onEditUserMessage}
+						editingMessageId={editingMessageId}
+						isAfterEditingMessage={afterEditingMessageIds.has(message.id)}
+					/>
+				);
+			}
+			const isLastInChain = lastInChainFlags[msgIdx] ?? false;
+			return (
+				<ChatMessageItem
+					key={message.id}
+					message={message}
+					parsed={parsed}
+					onImplementPlan={onImplementPlan}
+					onSendAskUserQuestionResponse={onSendAskUserQuestionResponse}
+					isChatCompleted={isChatCompleted}
+					latestAskUserQuestionToolId={latestAskUserQuestionToolId}
+					askUserQuestionResponseTextByToolId={
+						historicalAskUserQuestionResponseTextByToolId
+					}
+					hasUserResponseAfterAskQuestion={hasUserResponseAfterAskQuestion}
+					urlTransform={urlTransform}
+					isAfterEditingMessage={afterEditingMessageIds.has(message.id)}
+					hideActions={!isLastInChain}
+					mcpServers={mcpServers}
+					subagentTitles={subagentTitles}
+					subagentVariants={subagentVariants}
+					showDesktopPreviews={showDesktopPreviews}
+				/>
+			);
+		};
+
+		const timelineNodes: ReactNode[] = [];
+		let nextContextClearIndex = 0;
+		for (let msgIdx = 0; msgIdx < parsedMessages.length; msgIdx += 1) {
+			const entry = parsedMessages[msgIdx];
+			if (!entry) {
+				continue;
+			}
+			while (nextContextClearIndex < sortedContextClears.length) {
+				const contextClear = sortedContextClears[nextContextClearIndex];
+				if (!contextClear || contextClear.id >= entry.message.id) {
+					break;
+				}
+				timelineNodes.push(
+					<ContextClearDivider key={`context-clear-${contextClear.id}`} />,
+				);
+				nextContextClearIndex += 1;
+			}
+			timelineNodes.push(renderMessageEntry(entry, msgIdx));
+		}
+		while (nextContextClearIndex < sortedContextClears.length) {
+			const contextClear = sortedContextClears[nextContextClearIndex];
+			if (!contextClear) {
+				break;
+			}
+			timelineNodes.push(
+				<ContextClearDivider key={`context-clear-${contextClear.id}`} />,
+			);
+			nextContextClearIndex += 1;
+		}
+
 		return (
 			<ExpiredFileIdsProvider>
 				<div
 					data-testid="conversation-timeline"
 					className="flex flex-col gap-2"
 				>
-					{parsedMessages.map(({ message, parsed }, msgIdx) => {
-						if (message.role === "user") {
-							return (
-								<StickyUserMessage
-									key={message.id}
-									message={message}
-									parsed={parsed}
-									onEditUserMessage={onEditUserMessage}
-									editingMessageId={editingMessageId}
-									isAfterEditingMessage={afterEditingMessageIds.has(message.id)}
-								/>
-							);
-						}
-						// Hide actions on assistant messages that are not the
-						// last in a consecutive assistant chain. Flags are
-						// precomputed in a single reverse pass above.
-						const isLastInChain = lastInChainFlags[msgIdx];
-						return (
-							<ChatMessageItem
-								key={message.id}
-								message={message}
-								parsed={parsed}
-								onImplementPlan={onImplementPlan}
-								onSendAskUserQuestionResponse={onSendAskUserQuestionResponse}
-								isChatCompleted={isChatCompleted}
-								latestAskUserQuestionToolId={latestAskUserQuestionToolId}
-								askUserQuestionResponseTextByToolId={
-									historicalAskUserQuestionResponseTextByToolId
-								}
-								hasUserResponseAfterAskQuestion={
-									hasUserResponseAfterAskQuestion
-								}
-								urlTransform={urlTransform}
-								isAfterEditingMessage={afterEditingMessageIds.has(message.id)}
-								hideActions={!isLastInChain}
-								mcpServers={mcpServers}
-								subagentTitles={subagentTitles}
-								subagentVariants={subagentVariants}
-								showDesktopPreviews={showDesktopPreviews}
-							/>
-						);
-					})}
+					{timelineNodes}
 				</div>
 			</ExpiredFileIdsProvider>
 		);

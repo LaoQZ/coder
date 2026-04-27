@@ -506,10 +506,19 @@ type UploadChatFileResponse struct {
 	ID uuid.UUID `json:"id" format:"uuid"`
 }
 
-// ChatMessagesResponse contains the messages and queued messages for a chat.
+// ChatContextClear marks where a user cleared model context in a chat.
+type ChatContextClear struct {
+	ID        int64      `json:"id"`
+	ChatID    uuid.UUID  `json:"chat_id" format:"uuid"`
+	CreatedBy *uuid.UUID `json:"created_by,omitempty" format:"uuid"`
+	CreatedAt time.Time  `json:"created_at" format:"date-time"`
+}
+
+// ChatMessagesResponse contains messages and queued messages for a chat.
 type ChatMessagesResponse struct {
 	Messages       []ChatMessage       `json:"messages"`
 	QueuedMessages []ChatQueuedMessage `json:"queued_messages"`
+	ContextClears  []ChatContextClear  `json:"context_clears,omitempty"`
 	HasMore        bool                `json:"has_more"`
 }
 

@@ -1356,6 +1356,9 @@ func (p *Server) SendMessage(
 	return result, nil
 }
 
+// ClearChatContextMessageText is the marker stored in hidden clear boundaries.
+const ClearChatContextMessageText = "Previous chat context was cleared by the user."
+
 // ClearChatContext inserts a hidden compressed boundary so future prompt
 // assembly ignores model-visible messages before the boundary.
 func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, createdBy uuid.UUID) error {
@@ -1364,7 +1367,7 @@ func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, created
 	}
 
 	boundaryContent, err := chatprompt.MarshalParts([]codersdk.ChatMessagePart{
-		codersdk.ChatMessageText("Previous chat context was cleared by the user."),
+		codersdk.ChatMessageText(ClearChatContextMessageText),
 	})
 	if err != nil {
 		return xerrors.Errorf("encode clear boundary: %w", err)

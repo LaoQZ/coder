@@ -273,6 +273,24 @@ ORDER BY
 LIMIT
     COALESCE(NULLIF(@limit_val::int, 0), 50);
 
+-- name: GetChatContextClearMessagesByChatID :many
+SELECT
+    *
+FROM
+    chat_messages
+WHERE
+    chat_id = @chat_id::uuid
+    AND compressed = true
+    AND deleted = false
+    AND role = 'user'
+    AND visibility = 'model'
+    AND content = jsonb_build_array(jsonb_build_object(
+        'type', 'text',
+        'text', @message_text::text
+    ))
+ORDER BY
+    id ASC;
+
 -- name: GetChatMessagesForPromptByChatID :many
 WITH latest_compressed_summary AS (
     SELECT

@@ -55,6 +55,7 @@ interface ChatPageTimelineProps {
 	onSendAskUserQuestionResponse?: (message: string) => Promise<void> | void;
 	urlTransform?: UrlTransform;
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
+	contextClears?: readonly TypesGen.ChatContextClear[];
 }
 
 export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
@@ -67,6 +68,7 @@ export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
 	onSendAskUserQuestionResponse,
 	urlTransform,
 	mcpServers,
+	contextClears = [],
 }) => {
 	const [chatFullWidth] = useChatFullWidth();
 	const messagesByID = useChatSelector(store, selectMessagesByID);
@@ -119,6 +121,7 @@ export const ChatPageTimeline: FC<ChatPageTimelineProps> = ({
 					urlTransform={urlTransform}
 					mcpServers={mcpServers}
 					showDesktopPreviews={false}
+					contextClears={contextClears}
 				/>
 				<LiveStreamTail
 					store={store}
@@ -145,6 +148,7 @@ interface ChatPageInputProps {
 	organizationId: string | undefined;
 	store: ChatStoreHandle;
 	compressionThreshold: number | undefined;
+	contextClears?: readonly TypesGen.ChatContextClear[];
 	onSend: (
 		message: string,
 		attachments?: readonly PendingAttachment[],
@@ -215,6 +219,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	organizationId,
 	store,
 	compressionThreshold,
+	contextClears = [],
 	onSend,
 	onDeleteQueuedMessage,
 	onPromoteQueuedMessage,
@@ -297,7 +302,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 			}
 		: undefined;
 
-	const rawUsage = getLatestContextUsage(messages);
+	const rawUsage = getLatestContextUsage(messages, contextClears);
 	const latestContextUsage = rawUsage
 		? { ...rawUsage, compressionThreshold, lastInjectedContext }
 		: rawUsage;

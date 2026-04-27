@@ -1748,9 +1748,22 @@ func (api *API) getChatMessages(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	contextClearMessages, err := api.Database.GetChatContextClearMessagesByChatID(ctx, database.GetChatContextClearMessagesByChatIDParams{
+		ChatID:      chatID,
+		MessageText: chatd.ClearChatContextMessageText,
+	})
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Failed to get chat context clears.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
 	httpapi.Write(ctx, rw, http.StatusOK, codersdk.ChatMessagesResponse{
 		Messages:       convertChatMessages(messages),
 		QueuedMessages: convertChatQueuedMessages(queuedMessages),
+		ContextClears:  db2sdk.ChatContextClears(contextClearMessages),
 		HasMore:        hasMore,
 	})
 }

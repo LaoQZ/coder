@@ -1472,6 +1472,25 @@ func ChatMessage(m database.ChatMessage) codersdk.ChatMessage {
 	return msg
 }
 
+// ChatContextClear converts a hidden clear boundary to SDK metadata.
+func ChatContextClear(m database.ChatMessage) codersdk.ChatContextClear {
+	return codersdk.ChatContextClear{
+		ID:        m.ID,
+		ChatID:    m.ChatID,
+		CreatedBy: nullUUIDPtr(m.CreatedBy),
+		CreatedAt: m.CreatedAt,
+	}
+}
+
+// ChatContextClears converts hidden clear boundaries to SDK metadata.
+func ChatContextClears(messages []database.ChatMessage) []codersdk.ChatContextClear {
+	out := make([]codersdk.ChatContextClear, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, ChatContextClear(message))
+	}
+	return out
+}
+
 // chatMessageUsage builds a ChatMessageUsage from the database row,
 // returning nil when no token fields are populated.
 func chatMessageUsage(m database.ChatMessage) *codersdk.ChatMessageUsage {

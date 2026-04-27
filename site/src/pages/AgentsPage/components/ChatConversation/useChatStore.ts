@@ -550,6 +550,17 @@ export const useChatStore = (
 							}
 							continue;
 						}
+						case "context_cleared":
+							if (streamEvent.chat_id && streamEvent.chat_id !== chatID) {
+								continue;
+							}
+							discardBufferedParts();
+							store.clearStreamState();
+							void queryClient.invalidateQueries({
+								queryKey: chatMessagesKey(activeChatID),
+								exact: true,
+							});
+							continue;
 						default:
 							continue;
 					}

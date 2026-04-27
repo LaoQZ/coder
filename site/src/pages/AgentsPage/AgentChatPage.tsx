@@ -870,6 +870,19 @@ const AgentChatPage: FC = () => {
 	// Queued messages are only in the first page (most recent).
 	const chatQueuedMessages = chatMessagesQuery.data?.pages[0]?.queued_messages;
 
+	const chatContextClears = (() => {
+		const pages = chatMessagesQuery.data?.pages;
+		if (!pages || pages.length === 0) return undefined;
+		const byID = new Map(
+			pages
+				.flatMap((page) => page.context_clears ?? [])
+				.map((clear) => [clear.id, clear]),
+		);
+		const deduped = Array.from(byID.values());
+		deduped.sort((a, b) => a.id - b.id);
+		return deduped;
+	})();
+
 	// Build a synthetic ChatMessagesResponse from the flattened
 	// data for backward compat with useChatStore.
 	const chatMessagesData: TypesGen.ChatMessagesResponse | undefined =
@@ -877,6 +890,7 @@ const AgentChatPage: FC = () => {
 			? {
 					messages: chatMessagesList,
 					queued_messages: chatQueuedMessages ?? [],
+					context_clears: chatContextClears ?? [],
 					has_more: chatMessagesQuery.data?.pages.at(-1)?.has_more ?? false,
 				}
 			: undefined;
@@ -1526,6 +1540,7 @@ const AgentChatPage: FC = () => {
 			planModeEnabled={planModeEnabled}
 			onPlanModeToggle={handlePlanModeToggle}
 			compressionThreshold={compressionThreshold}
+			contextClears={chatContextClears ?? []}
 			isInputDisabled={isInputDisabled}
 			isSubmissionPending={isSubmissionPending}
 			isInterruptPending={isInterruptPending}
