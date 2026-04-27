@@ -1319,7 +1319,7 @@ export const updateChatDesktopEnabled = (queryClient: QueryClient) => ({
 
 const chatPersonalModelOverridesAdminSettingsKey = [
 	...chatsKey,
-	"personalModelOverridesAdminSettings",
+	"admin-personal-model-overrides",
 ] as const;
 
 export const chatPersonalModelOverridesAdminSettings = () => ({
