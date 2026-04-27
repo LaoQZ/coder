@@ -770,31 +770,40 @@ func (api *API) userCanUseChatModelConfig(
 	if modelConfigID == uuid.Nil {
 		return chatModelConfigUnavailableModelNotFoundOrDisabled, nil
 	}
+	//nolint:gocritic // Non-admin users need deployment config validation.
+	model, err := api.Database.GetChatModelConfigByID(
+		dbauthz.AsSystemRestricted(ctx),
+		modelConfigID,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || httpapi.Is404Error(err) {
+			return chatModelConfigUnavailableModelNotFoundOrDisabled, nil
+		}
+		return chatModelConfigAvailable, err
+	}
+	if !model.Enabled {
+		return chatModelConfigUnavailableModelNotFoundOrDisabled, nil
+	}
+
 	availability, err := api.getUserChatProviderAvailability(ctx, userID)
 	if err != nil {
 		return chatModelConfigAvailable, err
 	}
-	for _, model := range availability.enabledModels {
-		if model.ID != modelConfigID {
-			continue
-		}
-		provider, _, err := chatprovider.ResolveModelWithProviderHint(model.Model, model.Provider)
-		if err != nil {
-			return chatModelConfigUnavailableProviderDisabled, nil
-		}
-		if _, ok := availability.enabledProviderNames[provider]; !ok {
-			return chatModelConfigUnavailableProviderDisabled, nil
-		}
-		providerStatus, ok := availability.providerStatus[provider]
-		if !ok {
-			return chatModelConfigUnavailableProviderDisabled, nil
-		}
-		if !providerStatus.Available {
-			return chatModelConfigUnavailableCredentialsMissing, nil
-		}
-		return chatModelConfigAvailable, nil
+	provider, _, err := chatprovider.ResolveModelWithProviderHint(model.Model, model.Provider)
+	if err != nil {
+		return chatModelConfigUnavailableProviderDisabled, nil
 	}
-	return chatModelConfigUnavailableModelNotFoundOrDisabled, nil
+	if _, ok := availability.enabledProviderNames[provider]; !ok {
+		return chatModelConfigUnavailableProviderDisabled, nil
+	}
+	providerStatus, ok := availability.providerStatus[provider]
+	if !ok {
+		return chatModelConfigUnavailableProviderDisabled, nil
+	}
+	if !providerStatus.Available {
+		return chatModelConfigUnavailableCredentialsMissing, nil
+	}
+	return chatModelConfigAvailable, nil
 }
 
 func (api *API) validateUserChatModelConfigAvailable(
