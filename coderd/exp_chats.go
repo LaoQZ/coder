@@ -2445,18 +2445,18 @@ func (api *API) writeChildUnarchiveGuard(
 const (
 	clearChatCommandName              = "clear"
 	clearChatCommandValidationMessage = "The /clear command does not accept arguments or attachments."
-	clearChatBusyMessage              = "wait for the chat to finish or interrupt it before clearing context"
+	clearChatBusyMessage              = "Wait for the chat to finish or interrupt it before clearing context."
 )
 
-type clearChatCommandState int
+type clearChatCommandMatch int
 
 const (
-	clearChatCommandNone clearChatCommandState = iota
+	clearChatCommandNone clearChatCommandMatch = iota
 	clearChatCommandValid
 	clearChatCommandInvalid
 )
 
-func classifyClearChatCommand(parts []codersdk.ChatInputPart) clearChatCommandState {
+func classifyClearChatCommand(parts []codersdk.ChatInputPart) clearChatCommandMatch {
 	if len(parts) == 0 {
 		return clearChatCommandNone
 	}
@@ -2477,17 +2477,20 @@ func classifyClearChatCommand(parts []codersdk.ChatInputPart) clearChatCommandSt
 	return clearChatCommandInvalid
 }
 
+func normalizedChatInputPartType(part codersdk.ChatInputPart) string {
+	return strings.ToLower(strings.TrimSpace(string(part.Type)))
+}
+
 func isTextInputPart(part codersdk.ChatInputPart) bool {
-	return strings.ToLower(strings.TrimSpace(string(part.Type))) == string(codersdk.ChatInputPartTypeText)
+	return normalizedChatInputPartType(part) == string(codersdk.ChatInputPartTypeText)
 }
 
 func isTextOnlyInputPart(part codersdk.ChatInputPart) bool {
-	return isTextInputPart(part) &&
-		part.FileID == uuid.Nil &&
-		part.FileName == "" &&
-		part.StartLine == 0 &&
-		part.EndLine == 0 &&
-		part.Content == ""
+	if !isTextInputPart(part) {
+		return false
+	}
+	canonical := codersdk.ChatInputPart{Type: part.Type, Text: part.Text}
+	return part == canonical
 }
 
 // EXPERIMENTAL: this endpoint is experimental and is subject to change.
@@ -5052,7 +5055,7 @@ func createChatInputFromParts(
 	content := make([]codersdk.ChatMessagePart, 0, len(parts))
 	textParts := make([]string, 0, len(parts))
 	for i, part := range parts {
-		switch strings.ToLower(strings.TrimSpace(string(part.Type))) {
+		switch normalizedChatInputPartType(part) {
 		case string(codersdk.ChatInputPartTypeText):
 			text := strings.TrimSpace(part.Text)
 			if text == "" {

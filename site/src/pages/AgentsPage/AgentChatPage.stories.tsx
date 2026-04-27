@@ -24,6 +24,7 @@ import {
 	withAuthProvider,
 	withDashboardProvider,
 	withProxyProvider,
+	withToaster,
 	withWebSocket,
 } from "#/testHelpers/storybook";
 import AgentChatPage, { RIGHT_PANEL_OPEN_KEY } from "./AgentChatPage";
@@ -609,6 +610,107 @@ export const Loading: Story = {
 			{ messages: [], queued_messages: [], has_more: false },
 			{ diffUrl: undefined },
 		),
+	},
+};
+
+export const ClearCommandResult: Story = {
+	decorators: [withToaster],
+	parameters: {
+		queries: buildQueries(
+			{
+				id: CHAT_ID,
+				...baseChatFields,
+				title: "Clear command",
+				status: "completed",
+			},
+			{
+				messages: [
+					{
+						id: 1,
+						chat_id: CHAT_ID,
+						created_at: "2026-02-18T00:00:00.000Z",
+						role: "user",
+						content: [{ type: "text", text: "Visible history" }],
+					},
+				],
+				queued_messages: [],
+				has_more: false,
+			},
+			{ diffUrl: undefined },
+		),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const body = within(canvasElement.ownerDocument.body);
+		const user = userEvent.setup();
+		const refreshedChat = {
+			id: CHAT_ID,
+			...baseChatFields,
+			title: "Clear command",
+			status: "completed",
+		} satisfies TypesGen.Chat;
+		const refreshedMessages = {
+			messages: [
+				{
+					id: 1,
+					chat_id: CHAT_ID,
+					created_at: "2026-02-18T00:00:00.000Z",
+					role: "user",
+					content: [{ type: "text", text: "Visible history" }],
+				},
+			],
+			queued_messages: [],
+			context_clears: [
+				{
+					id: 2,
+					chat_id: CHAT_ID,
+					created_at: "2026-02-18T00:00:01.000Z",
+				},
+			],
+			has_more: false,
+		} satisfies TypesGen.ChatMessagesResponse;
+		const createMessageSpy = spyOn(
+			API.experimental,
+			"createChatMessage",
+		).mockResolvedValue({
+			queued: false,
+			command_result: { command: "clear", success: true },
+		});
+		const getChatSpy = spyOn(API.experimental, "getChat").mockResolvedValue(
+			refreshedChat,
+		);
+		const getChatMessagesSpy = spyOn(
+			API.experimental,
+			"getChatMessages",
+		).mockResolvedValue(refreshedMessages);
+
+		const editor = await canvas.findByRole("textbox");
+		await user.click(editor);
+		await user.type(editor, "/clear");
+		await user.click(canvas.getByRole("button", { name: "Send" }));
+
+		await waitFor(() => {
+			expect(createMessageSpy).toHaveBeenCalledWith(
+				CHAT_ID,
+				expect.objectContaining({
+					content: [{ type: "text", text: "/clear" }],
+				}),
+			);
+		});
+		await body.findByText("Context cleared.");
+		await waitFor(() => {
+			expect(getChatSpy).toHaveBeenCalledWith(CHAT_ID);
+		});
+		await waitFor(() => {
+			expect(getChatMessagesSpy).toHaveBeenCalledWith(
+				CHAT_ID,
+				expect.objectContaining({ limit: 50 }),
+			);
+		});
+		await waitFor(() => {
+			expect(canvas.getByText("Context cleared")).toBeInTheDocument();
+		});
+		expect(canvas.queryByText("/clear")).not.toBeInTheDocument();
 	},
 };
 

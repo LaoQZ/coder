@@ -490,6 +490,8 @@ type CreateChatMessageResponse struct {
 	QueuedMessage *ChatQueuedMessage `json:"queued_message,omitempty"`
 	Queued        bool               `json:"queued"`
 	Warnings      []string           `json:"warnings,omitempty"`
+	// CommandResult is set when the request ran a command. When set,
+	// Message, QueuedMessage, Queued, and Warnings are zero-valued.
 	CommandResult *ChatCommandResult `json:"command_result,omitempty"`
 }
 

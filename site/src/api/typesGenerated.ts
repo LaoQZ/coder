@@ -2769,6 +2769,10 @@ export interface CreateChatMessageResponse {
 	readonly queued_message?: ChatQueuedMessage;
 	readonly queued: boolean;
 	readonly warnings?: readonly string[];
+	/**
+	 * CommandResult is set when the request ran a command. When set,
+	 * Message, QueuedMessage, Queued, and Warnings are zero-valued.
+	 */
 	readonly command_result?: ChatCommandResult;
 }
 

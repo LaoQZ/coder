@@ -1417,11 +1417,7 @@ const AgentChatPage: FC = () => {
 				queryKey: chatMessagesKey(agentId),
 				exact: true,
 			});
-			if (response.command_result.success) {
-				toast.success(getChatCommandSuccessMessage(response.command_result));
-			} else {
-				toast.error(response.command_result.message || "Command failed.");
-			}
+			toast.success(getChatCommandSuccessMessage(response.command_result));
 			return;
 		}
 

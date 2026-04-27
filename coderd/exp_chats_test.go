@@ -5627,11 +5627,6 @@ func TestChatPinOrder(t *testing.T) {
 	})
 }
 
-const (
-	clearCommandValidationMessage = "The /clear command does not accept arguments or attachments."
-	clearCommandBusyMessage       = "wait for the chat to finish or interrupt it before clearing context"
-)
-
 func createClearCommandTestChat(
 	ctx context.Context,
 	t *testing.T,
@@ -5762,6 +5757,14 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 				},
 			},
 			{
+				name: "TextPartWithFileID",
+				content: []codersdk.ChatInputPart{{
+					Type:   codersdk.ChatInputPartTypeText,
+					Text:   "/clear",
+					FileID: uuid.New(),
+				}},
+			},
+			{
 				name: "Attachment",
 				content: []codersdk.ChatInputPart{
 					{Type: codersdk.ChatInputPartTypeText, Text: "/clear"},
@@ -5797,7 +5800,7 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 					Content: tt.content,
 				})
 				sdkErr := requireSDKError(t, err, http.StatusBadRequest)
-				require.Equal(t, clearCommandValidationMessage, sdkErr.Message)
+				require.Contains(t, sdkErr.Message, "The /clear command does not accept")
 			})
 		}
 	})
@@ -5826,7 +5829,7 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 			}},
 		})
 		sdkErr := requireSDKError(t, err, http.StatusConflict)
-		require.Equal(t, clearCommandBusyMessage, sdkErr.Message)
+		require.Contains(t, sdkErr.Message, "finish or interrupt")
 	})
 
 	t.Run("SubstringFallsThrough", func(t *testing.T) {
