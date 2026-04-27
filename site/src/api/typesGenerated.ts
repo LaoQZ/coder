@@ -1311,6 +1311,17 @@ export const ChatClientTypes: ChatClientType[] = ["api", "ui"];
 
 // From codersdk/chats.go
 /**
+ * ChatCommandResult is returned when a chat message request is consumed as
+ * a slash command instead of creating a message.
+ */
+export interface ChatCommandResult {
+	readonly command: string;
+	readonly success: boolean;
+	readonly message?: string;
+}
+
+// From codersdk/chats.go
+/**
  * ChatCompactionThresholdKeyPrefix scopes per-model chat compaction
  * threshold settings.
  */
@@ -2240,6 +2251,14 @@ export interface ChatStreamActionRequired {
 
 // From codersdk/chats.go
 /**
+ * ChatStreamContextCleared is the payload of a context_cleared stream event.
+ */
+export interface ChatStreamContextCleared {
+	readonly chat_id: string;
+}
+
+// From codersdk/chats.go
+/**
  * ChatStreamError represents an error event in the stream.
  */
 export interface ChatStreamError {
@@ -2284,11 +2303,13 @@ export interface ChatStreamEvent {
 	readonly retry?: ChatStreamRetry;
 	readonly queued_messages?: readonly ChatQueuedMessage[];
 	readonly action_required?: ChatStreamActionRequired;
+	readonly context_cleared?: ChatStreamContextCleared;
 }
 
 // From codersdk/chats.go
 export type ChatStreamEventType =
 	| "action_required"
+	| "context_cleared"
 	| "error"
 	| "message"
 	| "message_part"
@@ -2298,6 +2319,7 @@ export type ChatStreamEventType =
 
 export const ChatStreamEventTypes: ChatStreamEventType[] = [
 	"action_required",
+	"context_cleared",
 	"error",
 	"message",
 	"message_part",
@@ -2735,6 +2757,7 @@ export interface CreateChatMessageResponse {
 	readonly queued_message?: ChatQueuedMessage;
 	readonly queued: boolean;
 	readonly warnings?: readonly string[];
+	readonly command_result?: ChatCommandResult;
 }
 
 // From codersdk/chats.go

@@ -884,6 +884,9 @@ var (
 	// accept modifications (messages, edits, promotions, or
 	// tool-result submissions).
 	ErrChatArchived = xerrors.New("chat is archived")
+	// ErrChatNotIdle indicates the chat cannot be cleared until its
+	// current work has finished or queued messages are resolved.
+	ErrChatNotIdle = xerrors.New("chat is not idle")
 
 	// errChatTakenByOtherWorker is a sentinel used inside the
 	// processChat cleanup transaction to signal that another
@@ -1351,6 +1354,83 @@ func (p *Server) SendMessage(
 	p.publishChatPubsubEvent(result.Chat, codersdk.ChatWatchEventKindStatusChange, nil)
 	p.signalWake()
 	return result, nil
+}
+
+// ClearChatContext inserts a hidden compressed boundary so future prompt
+// assembly ignores model-visible messages before the boundary.
+func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, createdBy uuid.UUID) error {
+	if chatID == uuid.Nil {
+		return xerrors.New("chat_id is required")
+	}
+
+	boundaryContent, err := chatprompt.MarshalParts([]codersdk.ChatMessagePart{
+		codersdk.ChatMessageText("Previous chat context was cleared by the user."),
+	})
+	if err != nil {
+		return xerrors.Errorf("encode clear boundary: %w", err)
+	}
+
+	txErr := p.db.InTx(func(tx database.Store) error {
+		lockedChat, err := tx.GetChatByIDForUpdate(ctx, chatID)
+		if err != nil {
+			return xerrors.Errorf("lock chat: %w", err)
+		}
+
+		if lockedChat.Archived {
+			return ErrChatArchived
+		}
+		if !canClearChatContext(lockedChat.Status) {
+			return ErrChatNotIdle
+		}
+
+		queuedMessages, err := tx.GetChatQueuedMessages(ctx, chatID)
+		if err != nil {
+			return xerrors.Errorf("get queued messages: %w", err)
+		}
+		if len(queuedMessages) > 0 {
+			return ErrChatNotIdle
+		}
+
+		params := database.InsertChatMessagesParams{ //nolint:exhaustruct // Fields populated by appendChatMessage.
+			ChatID: chatID,
+		}
+		appendChatMessage(&params, newChatMessage(
+			database.ChatMessageRoleUser,
+			boundaryContent,
+			database.ChatMessageVisibilityModel,
+			lockedChat.LastModelConfigID,
+			chatprompt.CurrentContentVersion,
+		).withCreatedBy(createdBy).withCompressed())
+
+		_, err = tx.InsertChatMessages(ctx, params)
+		if err != nil {
+			return xerrors.Errorf("insert clear boundary: %w", err)
+		}
+		return nil
+	}, nil)
+	if txErr != nil {
+		return txErr
+	}
+
+	p.publishEvent(chatID, codersdk.ChatStreamEvent{
+		Type:   codersdk.ChatStreamEventTypeContextCleared,
+		ChatID: chatID,
+		ContextCleared: &codersdk.ChatStreamContextCleared{
+			ChatID: chatID,
+		},
+	})
+	return nil
+}
+
+func canClearChatContext(status database.ChatStatus) bool {
+	switch status {
+	case database.ChatStatusWaiting,
+		database.ChatStatusCompleted,
+		database.ChatStatusError:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Server) checkUsageLimit(ctx context.Context, store database.Store, ownerID uuid.UUID, organizationID uuid.NullUUID) error {
@@ -4538,12 +4618,13 @@ func (p *Server) Subscribe(
 					// Pubsub will deliver a duplicate status
 					// later; the frontend deduplicates it
 					// (setChatStatus is idempotent).
-					// action_required is also transient and
-					// only published on the local stream, so
-					// it must be forwarded here.
+					// action_required and context_cleared are also
+					// transient local events, so they must be
+					// forwarded here.
 					if event.Type == codersdk.ChatStreamEventTypeMessagePart ||
 						event.Type == codersdk.ChatStreamEventTypeStatus ||
-						event.Type == codersdk.ChatStreamEventTypeActionRequired {
+						event.Type == codersdk.ChatStreamEventTypeActionRequired ||
+						event.Type == codersdk.ChatStreamEventTypeContextCleared {
 						select {
 						case <-mergedCtx.Done():
 							return

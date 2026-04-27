@@ -21,6 +21,7 @@ import {
 	chatDesktopEnabled,
 	chatKey,
 	chatMessagesForInfiniteScroll,
+	chatMessagesKey,
 	chatModelConfigs,
 	chatModels,
 	createChatMessage,
@@ -99,7 +100,37 @@ export const draftInputStorageKeyPrefix = "agents.draft-input.";
 /** @internal localStorage key prefix for the per-chat active sidebar tab. Exported for testing. */
 export const lastActiveSidebarTabStorageKeyPrefix = "agents.last-active-tab.";
 
+const clearChatCommandName = "clear";
+const clearChatCommandToken = "/clear";
+
 const clearChatPlanMode = "" satisfies ChatPlanModeOrClear;
+
+export const getChatInputCommandName = (
+	content: readonly TypesGen.ChatInputPart[],
+): string | undefined => {
+	const firstPart = content[0];
+	if (firstPart?.type !== "text") {
+		return undefined;
+	}
+
+	const firstToken = firstPart.text?.trim().split(/\s+/, 1)[0];
+	if (firstToken === clearChatCommandToken) {
+		return clearChatCommandName;
+	}
+	return undefined;
+};
+
+const getChatCommandSuccessMessage = (
+	result: TypesGen.ChatCommandResult,
+): string => {
+	if (result.message) {
+		return result.message;
+	}
+	if (result.command === clearChatCommandName) {
+		return "Context cleared.";
+	}
+	return "Command completed.";
+};
 
 type PlanModeSwitch = TypesGen.ChatPlanMode | "clear";
 
@@ -1060,7 +1091,7 @@ const AgentChatPage: FC = () => {
 		} else if (isApiError(error)) {
 			const reason: ChatDetailError = {
 				kind: "generic",
-				message: error.message || "An unexpected error occurred.",
+				message: getErrorMessage(error, "An unexpected error occurred."),
 			};
 			store.setStreamError(reason);
 			setChatErrorReason(agentId, reason);
@@ -1336,6 +1367,7 @@ const AgentChatPage: FC = () => {
 					}
 				: {}),
 		};
+		const commandName = getChatInputCommandName(content);
 		clearChatErrorReason(agentId);
 		clearStreamError();
 		scrollToBottomRef.current?.();
@@ -1348,9 +1380,37 @@ const AgentChatPage: FC = () => {
 		try {
 			response = await sendMessage(request);
 		} catch (error) {
-			handleUsageLimitError(error);
+			if (commandName) {
+				toast.error(getErrorMessage(error, `Failed to run /${commandName}.`));
+			} else {
+				handleUsageLimitError(error);
+			}
 			throw error;
 		}
+		if (selectedModelConfigID) {
+			localStorage.setItem(lastModelConfigIDStorageKey, selectedModelConfigID);
+		} else {
+			localStorage.removeItem(lastModelConfigIDStorageKey);
+		}
+
+		if (response.command_result) {
+			store.clearStreamState();
+			void queryClient.invalidateQueries({
+				queryKey: chatKey(agentId),
+				exact: true,
+			});
+			void queryClient.invalidateQueries({
+				queryKey: chatMessagesKey(agentId),
+				exact: true,
+			});
+			if (response.command_result.success) {
+				toast.success(getChatCommandSuccessMessage(response.command_result));
+			} else {
+				toast.error(response.command_result.message || "Command failed.");
+			}
+			return;
+		}
+
 		// When the server accepts the message immediately (not
 		// queued), clear the stream and insert the user's message
 		// so it appears in the timeline without waiting for the
@@ -1370,11 +1430,6 @@ const AgentChatPage: FC = () => {
 				store.upsertDurableMessage(response.message);
 				upsertCacheMessages([response.message]);
 			}
-		}
-		if (selectedModelConfigID) {
-			localStorage.setItem(lastModelConfigIDStorageKey, selectedModelConfigID);
-		} else {
-			localStorage.removeItem(lastModelConfigIDStorageKey);
 		}
 		if (planModeSwitch !== undefined) {
 			setCachedChatPlanMode(

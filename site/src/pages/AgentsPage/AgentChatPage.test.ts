@@ -6,6 +6,7 @@ import {
 	clearPersistedSidebarTabId,
 	draftInputStorageKeyPrefix,
 	filterWorkspaceOptionsByOrganization,
+	getChatInputCommandName,
 	getPersistedDraftInputValue,
 	getPersistedSidebarTabId,
 	lastActiveSidebarTabStorageKeyPrefix,
@@ -90,6 +91,37 @@ const createDeferred = <T>(): Deferred<T> => {
 	});
 	return { promise, resolve, reject };
 };
+
+describe("getChatInputCommandName", () => {
+	it("detects clear commands that the server treats as command-like", () => {
+		expect(getChatInputCommandName([{ type: "text", text: "/clear" }])).toBe(
+			"clear",
+		);
+		expect(
+			getChatInputCommandName([
+				{ type: "text", text: "  /clear  " },
+				{ type: "file", file_id: "file-1" },
+			]),
+		).toBe("clear");
+		expect(
+			getChatInputCommandName([{ type: "text", text: "/clear now" }]),
+		).toBe("clear");
+	});
+
+	it("ignores ordinary messages that only mention clear", () => {
+		expect(
+			getChatInputCommandName([
+				{ type: "text", text: "Please explain /clear." },
+			]),
+		).toBeUndefined();
+		expect(
+			getChatInputCommandName([{ type: "text", text: "/clearance" }]),
+		).toBeUndefined();
+		expect(
+			getChatInputCommandName([{ type: "file", file_id: "file-1" }]),
+		).toBeUndefined();
+	});
+});
 
 describe("waitForPendingChatSettingsSyncs", () => {
 	it("waits for plan-mode and workspace updates before resolving", async () => {

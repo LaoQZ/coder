@@ -476,12 +476,21 @@ type EditChatMessageRequest struct {
 	Content []ChatInputPart `json:"content"`
 }
 
+// ChatCommandResult is returned when a chat message request is consumed as
+// a slash command instead of creating a message.
+type ChatCommandResult struct {
+	Command string `json:"command"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
 // CreateChatMessageResponse is the response from adding a message to a chat.
 type CreateChatMessageResponse struct {
 	Message       *ChatMessage       `json:"message,omitempty"`
 	QueuedMessage *ChatQueuedMessage `json:"queued_message,omitempty"`
 	Queued        bool               `json:"queued"`
 	Warnings      []string           `json:"warnings,omitempty"`
+	CommandResult *ChatCommandResult `json:"command_result,omitempty"`
 }
 
 // EditChatMessageResponse is the response from editing a message in a chat.
@@ -1259,7 +1268,13 @@ const (
 	ChatStreamEventTypeQueueUpdate    ChatStreamEventType = "queue_update"
 	ChatStreamEventTypeRetry          ChatStreamEventType = "retry"
 	ChatStreamEventTypeActionRequired ChatStreamEventType = "action_required"
+	ChatStreamEventTypeContextCleared ChatStreamEventType = "context_cleared"
 )
+
+// ChatStreamContextCleared is the payload of a context_cleared stream event.
+type ChatStreamContextCleared struct {
+	ChatID uuid.UUID `json:"chat_id" format:"uuid"`
+}
 
 // ChatQueuedMessage represents a queued message waiting to be processed.
 type ChatQueuedMessage struct {
@@ -1434,6 +1449,7 @@ type ChatStreamEvent struct {
 	Retry          *ChatStreamRetry          `json:"retry,omitempty"`
 	QueuedMessages []ChatQueuedMessage       `json:"queued_messages,omitempty"`
 	ActionRequired *ChatStreamActionRequired `json:"action_required,omitempty"`
+	ContextCleared *ChatStreamContextCleared `json:"context_cleared,omitempty"`
 }
 
 // ChatCostSummaryOptions are optional query parameters for GetChatCostSummary.

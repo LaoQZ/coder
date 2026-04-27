@@ -2429,6 +2429,54 @@ func (api *API) writeChildUnarchiveGuard(
 	return false
 }
 
+const (
+	clearChatCommandName              = "clear"
+	clearChatCommandValidationMessage = "The /clear command does not accept arguments or attachments."
+	clearChatBusyMessage              = "wait for the chat to finish or interrupt it before clearing context"
+)
+
+type clearChatCommandState int
+
+const (
+	clearChatCommandNone clearChatCommandState = iota
+	clearChatCommandValid
+	clearChatCommandInvalid
+)
+
+func classifyClearChatCommand(parts []codersdk.ChatInputPart) clearChatCommandState {
+	if len(parts) == 0 {
+		return clearChatCommandNone
+	}
+
+	first := parts[0]
+	if !isTextInputPart(first) {
+		return clearChatCommandNone
+	}
+
+	trimmed := strings.TrimSpace(first.Text)
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 || fields[0] != "/clear" {
+		return clearChatCommandNone
+	}
+	if len(parts) == 1 && trimmed == "/clear" && isTextOnlyInputPart(first) {
+		return clearChatCommandValid
+	}
+	return clearChatCommandInvalid
+}
+
+func isTextInputPart(part codersdk.ChatInputPart) bool {
+	return strings.ToLower(strings.TrimSpace(string(part.Type))) == string(codersdk.ChatInputPartTypeText)
+}
+
+func isTextOnlyInputPart(part codersdk.ChatInputPart) bool {
+	return isTextInputPart(part) &&
+		part.FileID == uuid.Nil &&
+		part.FileName == "" &&
+		part.StartLine == 0 &&
+		part.EndLine == 0 &&
+		part.Content == ""
+}
+
 // EXPERIMENTAL: this endpoint is experimental and is subject to change.
 func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -2460,6 +2508,41 @@ func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 
 	var req codersdk.CreateChatMessageRequest
 	if !httpapi.Read(ctx, rw, r, &req) {
+		return
+	}
+
+	switch classifyClearChatCommand(req.Content) {
+	case clearChatCommandValid:
+		clearErr := api.chatDaemon.ClearChatContext(ctx, chatID, apiKey.UserID)
+		if clearErr != nil {
+			switch {
+			case xerrors.Is(clearErr, chatd.ErrChatArchived):
+				httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+					Message: "Cannot send messages to an archived chat.",
+				})
+			case xerrors.Is(clearErr, chatd.ErrChatNotIdle):
+				httpapi.Write(ctx, rw, http.StatusConflict, codersdk.Response{
+					Message: clearChatBusyMessage,
+				})
+			default:
+				httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+					Message: "Failed to clear chat context.",
+					Detail:  clearErr.Error(),
+				})
+			}
+			return
+		}
+		httpapi.Write(ctx, rw, http.StatusOK, codersdk.CreateChatMessageResponse{
+			CommandResult: &codersdk.ChatCommandResult{
+				Command: clearChatCommandName,
+				Success: true,
+			},
+		})
+		return
+	case clearChatCommandInvalid:
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: clearChatCommandValidationMessage,
+		})
 		return
 	}
 
