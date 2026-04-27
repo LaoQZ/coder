@@ -84,7 +84,7 @@ export function useEmptyStateDraft() {
 				try {
 					localStorage.setItem(emptyInputStorageKey, serializedEditorState);
 				} catch {
-					// QuotaExceededError — silently discard the draft.
+					// QuotaExceededError, silently discard the draft.
 				}
 			} else {
 				localStorage.removeItem(emptyInputStorageKey);
@@ -165,6 +165,10 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 	const [initialLastModelConfigID] = useState(() => {
 		return localStorage.getItem(lastModelConfigIDStorageKey) ?? "";
 	});
+	/*
+	 * Model precedence: user click > root override (specific model) > root
+	 * override (chat_default, resolved) > last-used > default > first available.
+	 */
 	const lastUsedModelID =
 		initialLastModelConfigID &&
 		modelOptions.some((option) => option.id === initialLastModelConfigID)
@@ -416,7 +420,7 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 		setPrevPermittedOrgs(permittedOrgs);
 		if (selectedOrg && !permittedOrgs.some((o) => o.id === selectedOrg.id)) {
 			// Fall back through: first permitted org, then the
-			// dashboard default. Never null out selectedOrg —
+			// dashboard default. Never null out selectedOrg.
 			// organizationId must always be a valid UUID for the
 			// create-chat request.
 			const nextOrg = permittedOrgs[0] ?? initialOrg ?? null;

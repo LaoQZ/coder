@@ -415,6 +415,20 @@ export const LoadingModelCatalog: Story = {
 	},
 };
 
+export const LoadingPersonalModelOverrides: Story = {
+	args: {
+		...defaultArgs,
+		isPersonalModelOverridesLoading: true,
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByRole("textbox")).toHaveAttribute(
+			"aria-disabled",
+			"true",
+		);
+	},
+};
+
 export const NoModelsConfigured: Story = {
 	args: {
 		...defaultArgs,

@@ -56,6 +56,8 @@ interface PersonalModelOverrideRowProps {
 export interface AgentSettingsUserAgentsPageViewProps {
 	overridesData?: TypesGen.UserChatPersonalModelOverridesResponse;
 	overridesError: unknown;
+	onRetryOverrides?: () => void;
+	isRetryingOverrides?: boolean;
 	isLoadingOverrides: boolean;
 	modelOptions: readonly ModelSelectorOption[];
 	modelConfigs: readonly TypesGen.ChatModelConfig[];
@@ -80,11 +82,13 @@ const modelSelectionValue = (modelConfigID: string): ModelSelectionValue => {
 	return `model:${modelConfigID}` as const;
 };
 
+const EMPTY_MODEL_PLACEHOLDER = modelSelectionValue("__empty__");
+
 const toSelectionValue = (
 	overrideData: PersonalOverride | undefined,
 	context: PersonalOverrideContext,
 ): SelectionValue => {
-	if (!overrideData) {
+	if (!overrideData || overrideData.is_malformed) {
 		return modeSelectionValue(
 			context === "root" ? "chat_default" : "deployment_default",
 		);
@@ -146,12 +150,15 @@ const getSelectionHelp = (
 		return "Uses the selected model for this context.";
 	}
 	if (selection === modeSelectionValue("deployment_default")) {
+		if (context === "root") {
+			return "Not supported for root agents.";
+		}
 		return context === "explore"
 			? "Uses the admin-defined Explore deployment default."
 			: "Uses the admin-defined General deployment default.";
 	}
 	if (context === "root") {
-		return "Uses the model marked default on the model definition page.";
+		return "Uses the deployment's default model.";
 	}
 	if (context === "explore") {
 		return "Uses the current turn's model.";
@@ -172,6 +179,8 @@ export const AgentSettingsUserAgentsPageView: FC<
 > = ({
 	overridesData,
 	overridesError,
+	onRetryOverrides,
+	isRetryingOverrides = false,
 	isLoadingOverrides,
 	modelOptions,
 	modelConfigs,
@@ -197,7 +206,22 @@ export const AgentSettingsUserAgentsPageView: FC<
 				label="Agents"
 				description="Choose personal model defaults for root agents and delegated agents."
 			/>
-			{overridesError ? <ErrorAlert error={overridesError} /> : null}
+			{overridesError ? (
+				<div className="flex flex-col gap-2">
+					<ErrorAlert error={overridesError} />
+					{onRetryOverrides && (
+						<Button
+							disabled={isRetryingOverrides}
+							onClick={onRetryOverrides}
+							size="sm"
+							type="button"
+							variant="outline"
+						>
+							Retry
+						</Button>
+					)}
+				</div>
+			) : null}
 			{!personalOverridesEnabled && (
 				<Alert severity="info">
 					<AlertDescription>
@@ -356,7 +380,7 @@ const PersonalModelOverrideRow: FC<PersonalModelOverrideRowProps> = ({
 								</SelectItem>
 							)}
 							{modelOptions.length === 0 && !isUnavailableSavedModel && (
-								<SelectItem value="model:__empty__" disabled>
+								<SelectItem value={EMPTY_MODEL_PLACEHOLDER} disabled>
 									No enabled models found.
 								</SelectItem>
 							)}

@@ -77,25 +77,21 @@ const AgentSettingsAgentsPage: FC = () => {
 	return (
 		<RequirePermission isFeatureVisible={canEditDeploymentConfig}>
 			<AgentSettingsAgentsPageView
-				personalModelOverridesAdminSettingsData={
-					personalModelOverridesAdminSettingsQuery.data
-				}
-				personalModelOverridesAdminSettingsError={
-					personalModelOverridesAdminSettingsQuery.error
-				}
-				onRetryPersonalModelOverridesAdminSettings={() => {
+				adminOverridesData={personalModelOverridesAdminSettingsQuery.data}
+				adminOverridesError={personalModelOverridesAdminSettingsQuery.error}
+				onRetryAdminOverrides={() => {
 					void personalModelOverridesAdminSettingsQuery.refetch();
 				}}
-				isRetryingPersonalModelOverridesAdminSettings={
+				isRetryingAdminOverrides={
 					personalModelOverridesAdminSettingsQuery.isFetching
 				}
-				onSavePersonalModelOverridesAdminSettings={
+				onSaveAdminOverrides={
 					savePersonalModelOverridesAdminSettingsMutation.mutate
 				}
-				isSavingPersonalModelOverridesAdminSettings={
+				isSavingAdminOverrides={
 					savePersonalModelOverridesAdminSettingsMutation.isPending
 				}
-				isSavePersonalModelOverridesAdminSettingsError={
+				isSaveAdminOverridesError={
 					savePersonalModelOverridesAdminSettingsMutation.isError
 				}
 				generalModelOverrideData={generalModelOverrideQuery.data}

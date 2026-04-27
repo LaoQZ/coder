@@ -85,13 +85,13 @@ const allModelConfigs: TypesGen.ChatModelConfig[] = [
 const makeArgs = (
 	overrides: Partial<AgentSettingsAgentsPageViewProps> = {},
 ): AgentSettingsAgentsPageViewProps => ({
-	personalModelOverridesAdminSettingsData: { allow_users: false },
-	personalModelOverridesAdminSettingsError: undefined,
-	onRetryPersonalModelOverridesAdminSettings: fn(),
-	isRetryingPersonalModelOverridesAdminSettings: false,
-	onSavePersonalModelOverridesAdminSettings: fn(),
-	isSavingPersonalModelOverridesAdminSettings: false,
-	isSavePersonalModelOverridesAdminSettingsError: false,
+	adminOverridesData: { allow_users: false },
+	adminOverridesError: undefined,
+	onRetryAdminOverrides: fn(),
+	isRetryingAdminOverrides: false,
+	onSaveAdminOverrides: fn(),
+	isSavingAdminOverrides: false,
+	isSaveAdminOverridesError: false,
 	generalModelOverrideData: buildOverrideData("general"),
 	exploreModelOverrideData: buildOverrideData("explore"),
 	modelConfigsData: allModelConfigs,
@@ -171,7 +171,7 @@ export const AllOverridesUnset: Story = {
 
 export const PersonalOverridesDisabled: Story = {
 	args: makeArgs({
-		personalModelOverridesAdminSettingsData: { allow_users: false },
+		adminOverridesData: { allow_users: false },
 	}),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -185,7 +185,7 @@ export const PersonalOverridesDisabled: Story = {
 
 export const PersonalOverridesEnabled: Story = {
 	args: makeArgs({
-		personalModelOverridesAdminSettingsData: { allow_users: true },
+		adminOverridesData: { allow_users: true },
 	}),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -199,10 +199,8 @@ export const PersonalOverridesEnabled: Story = {
 
 export const PersonalOverridesLoadError: Story = {
 	args: makeArgs({
-		personalModelOverridesAdminSettingsData: undefined,
-		personalModelOverridesAdminSettingsError: new Error(
-			"Failed to load personal model overrides.",
-		),
+		adminOverridesData: undefined,
+		adminOverridesError: new Error("Failed to load personal model overrides."),
 	}),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);

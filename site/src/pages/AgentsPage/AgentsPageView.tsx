@@ -68,6 +68,7 @@ interface AgentsPageViewProps {
 	onRenameTitle: (chatId: string, title: string) => Promise<void>;
 	regeneratingTitleChatIds: readonly string[];
 	onToggleSidebarCollapsed: () => void;
+	isPersonalModelOverridesEnabled?: boolean;
 	isAgentsAdmin: boolean;
 	hasNextPage: boolean | undefined;
 	onLoadMore: () => void;
@@ -106,6 +107,7 @@ export const AgentsPageView: FC<AgentsPageViewProps> = ({
 	onRenameTitle,
 	regeneratingTitleChatIds,
 	onToggleSidebarCollapsed,
+	isPersonalModelOverridesEnabled,
 	isAgentsAdmin,
 	hasNextPage,
 	onLoadMore,
@@ -197,6 +199,7 @@ export const AgentsPageView: FC<AgentsPageViewProps> = ({
 					archivedFilter={archivedFilter}
 					onArchivedFilterChange={onArchivedFilterChange}
 					onCollapse={onCollapseSidebar}
+					isPersonalModelOverridesEnabled={isPersonalModelOverridesEnabled}
 					isAdmin={isAgentsAdmin}
 				/>
 			</div>

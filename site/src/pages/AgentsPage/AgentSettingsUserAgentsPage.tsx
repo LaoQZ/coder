@@ -48,6 +48,10 @@ const AgentSettingsUserAgentsPage: FC = () => {
 		<AgentSettingsUserAgentsPageView
 			overridesData={overridesQuery.data}
 			overridesError={overridesQuery.error}
+			onRetryOverrides={() => {
+				void overridesQuery.refetch();
+			}}
+			isRetryingOverrides={overridesQuery.isFetching}
 			isLoadingOverrides={overridesQuery.isLoading}
 			modelOptions={modelOptions}
 			modelConfigs={modelConfigsQuery.data ?? []}

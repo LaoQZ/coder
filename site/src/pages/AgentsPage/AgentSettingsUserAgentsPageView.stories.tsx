@@ -107,6 +107,8 @@ const makeArgs = (
 ): AgentSettingsUserAgentsPageViewProps => ({
 	overridesData: buildOverridesResponse(),
 	overridesError: undefined,
+	onRetryOverrides: fn(),
+	isRetryingOverrides: false,
 	isLoadingOverrides: false,
 	modelOptions,
 	modelConfigs,
@@ -286,6 +288,73 @@ export const MalformedSavedValues: Story = {
 	},
 };
 
+export const MalformedEmptyModelSavedValues: Story = {
+	args: makeArgs({
+		overridesData: buildOverridesResponse({
+			root: buildOverride("root", {
+				mode: "model",
+				model_config_id: "",
+				is_set: true,
+				is_malformed: true,
+			}),
+			general: buildOverride("general", {
+				mode: "model",
+				model_config_id: "",
+				is_set: true,
+				is_malformed: true,
+			}),
+			explore: buildOverride("explore", {
+				mode: "model",
+				model_config_id: "",
+				is_set: true,
+				is_malformed: true,
+			}),
+		}),
+	}),
+	play: async ({ canvasElement, args }) => {
+		const rootSection = await getSection(canvasElement, "Root agent model");
+		const generalSection = await getSection(
+			canvasElement,
+			"General subagent model",
+		);
+		const exploreSection = await getSection(
+			canvasElement,
+			"Explore subagent model",
+		);
+
+		expect(rootSection).toHaveTextContent("Chat default");
+		expect(generalSection).toHaveTextContent("Deployment default");
+		expect(exploreSection).toHaveTextContent("Deployment default");
+
+		for (const section of [rootSection, generalSection, exploreSection]) {
+			expect(within(section).getByText(MALFORMED_WARNING)).toBeInTheDocument();
+			expect(
+				within(section).getByRole("button", { name: "Save" }),
+			).toBeEnabled();
+		}
+
+		await userEvent.click(
+			within(rootSection).getByRole("button", { name: "Save" }),
+		);
+		await waitFor(() => {
+			expect(args.onSaveRootModelOverride).toHaveBeenCalledWith(
+				{ mode: "chat_default", model_config_id: "" },
+				expect.anything(),
+			);
+		});
+
+		await userEvent.click(
+			within(generalSection).getByRole("button", { name: "Save" }),
+		);
+		await waitFor(() => {
+			expect(args.onSaveGeneralModelOverride).toHaveBeenCalledWith(
+				{ mode: "deployment_default", model_config_id: "" },
+				expect.anything(),
+			);
+		});
+	},
+};
+
 export const UnavailableSavedModels: Story = {
 	args: makeArgs({
 		overridesData: buildOverridesResponse({
@@ -336,6 +405,40 @@ export const LoadingState: Story = {
 		expect(
 			within(rootSection).getByRole("button", { name: "Save" }),
 		).toBeDisabled();
+	},
+};
+
+export const OverridesError: Story = {
+	args: makeArgs({
+		overridesData: undefined,
+		overridesError: new Error("Failed to load overrides"),
+	}),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement);
+		expect(
+			await canvas.findByText("Failed to load overrides"),
+		).toBeInTheDocument();
+
+		const retryButton = canvas.getByRole("button", { name: "Retry" });
+		expect(retryButton).toBeEnabled();
+		await userEvent.click(retryButton);
+		expect(args.onRetryOverrides).toHaveBeenCalled();
+
+		const rootSection = await getSection(canvasElement, "Root agent model");
+		const generalSection = await getSection(
+			canvasElement,
+			"General subagent model",
+		);
+		const exploreSection = await getSection(
+			canvasElement,
+			"Explore subagent model",
+		);
+		for (const section of [rootSection, generalSection, exploreSection]) {
+			expect(within(section).getByRole("combobox")).toBeDisabled();
+			expect(
+				within(section).getByRole("button", { name: "Save" }),
+			).toBeDisabled();
+		}
 	},
 };
 
@@ -403,6 +506,7 @@ export const InvalidRootDeploymentDefault: Story = {
 				/The saved root override uses the deployment default/i,
 			),
 		).toBeInTheDocument();
+		expect(rootSection).toHaveTextContent("Not supported for root agents.");
 		expect(
 			within(rootSection).getByRole("button", { name: "Save" }),
 		).toBeDisabled();
