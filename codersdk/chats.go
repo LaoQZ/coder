@@ -639,6 +639,18 @@ type UpdateChatDesktopEnabledRequest struct {
 	EnableDesktop bool `json:"enable_desktop"`
 }
 
+// ChatComputerUseProviderResponse is the response for getting the computer use
+// provider setting.
+type ChatComputerUseProviderResponse struct {
+	Provider string `json:"provider"`
+}
+
+// UpdateChatComputerUseProviderRequest is the request to update the computer use
+// provider setting.
+type UpdateChatComputerUseProviderRequest struct {
+	Provider string `json:"provider"`
+}
+
 // ChatDebugLoggingAdminSettings describes the runtime admin setting
 // that allows users to opt into chat debug logging.
 type ChatDebugLoggingAdminSettings struct {
@@ -2136,6 +2148,34 @@ func (c *ExperimentalClient) GetChatDesktopEnabled(ctx context.Context) (ChatDes
 // UpdateChatDesktopEnabled updates the deployment-wide desktop setting.
 func (c *ExperimentalClient) UpdateChatDesktopEnabled(ctx context.Context, req UpdateChatDesktopEnabledRequest) error {
 	res, err := c.Request(ctx, http.MethodPut, "/api/experimental/chats/config/desktop-enabled", req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		return ReadBodyAsError(res)
+	}
+	return nil
+}
+
+// GetChatComputerUseProvider returns the deployment-wide computer use provider.
+func (c *ExperimentalClient) GetChatComputerUseProvider(ctx context.Context) (ChatComputerUseProviderResponse, error) {
+	res, err := c.Request(ctx, http.MethodGet, "/api/experimental/chats/config/computer-use-provider", nil)
+	if err != nil {
+		return ChatComputerUseProviderResponse{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return ChatComputerUseProviderResponse{}, ReadBodyAsError(res)
+	}
+	var resp ChatComputerUseProviderResponse
+	return resp, json.NewDecoder(res.Body).Decode(&resp)
+}
+
+// UpdateChatComputerUseProvider updates the deployment-wide computer use
+// provider.
+func (c *ExperimentalClient) UpdateChatComputerUseProvider(ctx context.Context, req UpdateChatComputerUseProviderRequest) error {
+	res, err := c.Request(ctx, http.MethodPut, "/api/experimental/chats/config/computer-use-provider", req)
 	if err != nil {
 		return err
 	}

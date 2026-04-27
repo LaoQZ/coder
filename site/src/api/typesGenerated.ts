@@ -1317,6 +1317,15 @@ export const ChatClientTypes: ChatClientType[] = ["api", "ui"];
 export const ChatCompactionThresholdKeyPrefix =
 	"chat_compaction_threshold_pct:";
 
+// From codersdk/chats.go
+/**
+ * ChatComputerUseProviderResponse is the response for getting the computer use
+ * provider setting.
+ */
+export interface ChatComputerUseProviderResponse {
+	readonly provider: string;
+}
+
 // From codersdk/deployment.go
 export interface ChatConfig {
 	readonly acquire_batch_size: number;
@@ -7709,6 +7718,15 @@ export interface UpdateChatAgentModelOverrideRequest {
  */
 export interface UpdateChatAutoArchiveDaysRequest {
 	readonly auto_archive_days: number;
+}
+
+// From codersdk/chats.go
+/**
+ * UpdateChatComputerUseProviderRequest is the request to update the computer use
+ * provider setting.
+ */
+export interface UpdateChatComputerUseProviderRequest {
+	readonly provider: string;
 }
 
 // From codersdk/chats.go

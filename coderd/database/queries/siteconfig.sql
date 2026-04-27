@@ -203,6 +203,14 @@ SET value = CASE
 END
 WHERE site_configs.key = 'agents_desktop_enabled';
 
+-- name: GetChatComputerUseProvider :one
+SELECT
+	COALESCE((SELECT value FROM site_configs WHERE key = 'agents_computer_use_provider'), '') :: text AS provider;
+
+-- name: UpsertChatComputerUseProvider :exec
+INSERT INTO site_configs (key, value) VALUES ('agents_computer_use_provider', sqlc.arg(provider))
+ON CONFLICT (key) DO UPDATE SET value = sqlc.arg(provider) WHERE site_configs.key = 'agents_computer_use_provider';
+
 -- GetChatDebugLoggingAllowUsers returns the runtime admin setting that
 -- allows users to opt into chat debug logging when the deployment does
 -- not already force debug logging on globally.
