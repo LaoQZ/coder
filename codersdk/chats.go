@@ -550,7 +550,7 @@ type ChatContextClear struct {
 type ChatMessagesResponse struct {
 	Messages       []ChatMessage       `json:"messages"`
 	QueuedMessages []ChatQueuedMessage `json:"queued_messages"`
-	Events         []ChatEvent         `json:"events"`
+	Events         []ChatEvent         `json:"events,omitempty"`
 	ContextClears  []ChatContextClear  `json:"context_clears,omitempty"`
 	HasMore        bool                `json:"has_more"`
 }

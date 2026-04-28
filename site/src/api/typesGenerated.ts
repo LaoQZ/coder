@@ -1926,7 +1926,7 @@ export interface ChatMessagesPaginationOptions {
 export interface ChatMessagesResponse {
 	readonly messages: readonly ChatMessage[];
 	readonly queued_messages: readonly ChatQueuedMessage[];
-	readonly events: readonly ChatEvent[];
+	readonly events?: readonly ChatEvent[];
 	readonly context_clears?: readonly ChatContextClear[];
 	readonly has_more: boolean;
 }
