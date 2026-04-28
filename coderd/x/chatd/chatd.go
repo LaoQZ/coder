@@ -1356,26 +1356,14 @@ func (p *Server) SendMessage(
 	return result, nil
 }
 
-// ClearChatContextMessageText is the marker stored in hidden clear boundaries.
-// Treat this text as schema-bound. GetChatContextClearMessagesByChatID uses it
-// to distinguish clear markers from other compressed model-only messages, so
-// changing it would hide dividers for previously cleared chats.
-const ClearChatContextMessageText = "Previous chat context was cleared by the user."
-
-// ClearChatContext inserts a hidden compressed boundary so future prompt
+// ClearChatContext inserts a visible context boundary so future prompt
 // assembly ignores model-visible messages before the boundary.
-func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, createdBy uuid.UUID) error {
+func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, createdBy uuid.UUID) (database.ChatEvent, error) {
 	if chatID == uuid.Nil {
-		return xerrors.New("chat_id is required")
+		return database.ChatEvent{}, xerrors.New("chat_id is required")
 	}
 
-	boundaryContent, err := chatprompt.MarshalParts([]codersdk.ChatMessagePart{
-		codersdk.ChatMessageText(ClearChatContextMessageText),
-	})
-	if err != nil {
-		return xerrors.Errorf("encode clear boundary: %w", err)
-	}
-
+	var insertedEvent database.ChatEvent
 	txErr := p.db.InTx(func(tx database.Store) error {
 		lockedChat, err := tx.GetChatByIDForUpdate(ctx, chatID)
 		if err != nil {
@@ -1397,29 +1385,42 @@ func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, created
 			return ErrChatNotIdle
 		}
 
-		params := database.InsertChatMessagesParams{ //nolint:exhaustruct // Fields populated by appendChatMessage.
-			ChatID: chatID,
-		}
-		appendChatMessage(&params, newChatMessage(
-			database.ChatMessageRoleUser,
-			boundaryContent,
-			database.ChatMessageVisibilityModel,
-			lockedChat.LastModelConfigID,
-			chatprompt.CurrentContentVersion,
-		).withCreatedBy(createdBy).withCompressed())
-
-		_, err = tx.InsertChatMessages(ctx, params)
+		maxEventID, err := tx.GetMaxChatEventIDByChatID(ctx, chatID)
 		if err != nil {
-			return xerrors.Errorf("insert clear boundary: %w", err)
+			return xerrors.Errorf("get max chat event id: %w", err)
+		}
+
+		boundaryAfterEventID := sql.NullInt64{}
+		if maxEventID > 0 {
+			boundaryAfterEventID = sql.NullInt64{Int64: maxEventID, Valid: true}
+		}
+
+		insertedEvent, err = tx.InsertChatContextBoundaryEvent(ctx, database.InsertChatContextBoundaryEventParams{
+			ChatID:                   chatID,
+			BoundaryKind:             "clear",
+			BoundarySource:           "user",
+			BoundaryScope:            "chat",
+			BoundaryAfterEventID:     boundaryAfterEventID,
+			BoundarySummaryMessageID: sql.NullInt64{},
+			Visible:                  true,
+			CreatedBy: uuid.NullUUID{
+				UUID:  createdBy,
+				Valid: createdBy != uuid.Nil,
+			},
+			CreatedAt: sql.NullTime{},
+			Metadata:  pqtype.NullRawMessage{},
+		})
+		if err != nil {
+			return xerrors.Errorf("insert clear boundary event: %w", err)
 		}
 		return nil
 	}, nil)
 	if txErr != nil {
-		return txErr
+		return database.ChatEvent{}, txErr
 	}
 
-	p.publishContextCleared(chatID)
-	return nil
+	p.publishClearContextBoundary(insertedEvent)
+	return insertedEvent, nil
 }
 
 func canClearChatContext(status database.ChatStatus) bool {
@@ -4594,6 +4595,21 @@ func (p *Server) Subscribe(
 						}
 					}
 				}
+				if notify.ContextBoundary != nil {
+					boundary := *notify.ContextBoundary
+					if boundary.ChatID == uuid.Nil {
+						boundary.ChatID = chatID
+					}
+					select {
+					case <-mergedCtx.Done():
+						return
+					case mergedEvents <- codersdk.ChatStreamEvent{
+						Type:            codersdk.ChatStreamEventTypeContextBoundary,
+						ChatID:          chatID,
+						ContextBoundary: &boundary,
+					}:
+					}
+				}
 				if notify.ContextCleared {
 					select {
 					case <-mergedCtx.Done():
@@ -4682,16 +4698,23 @@ func (p *Server) publishEvent(chatID uuid.UUID, event codersdk.ChatStreamEvent) 
 	p.publishToStream(chatID, event)
 }
 
-func (p *Server) publishContextCleared(chatID uuid.UUID) {
-	p.publishEvent(chatID, codersdk.ChatStreamEvent{
+func (p *Server) publishClearContextBoundary(event database.ChatEvent) {
+	boundary := db2sdk.ChatStreamContextBoundary(event)
+	p.publishEvent(event.ChatID, codersdk.ChatStreamEvent{
+		Type:            codersdk.ChatStreamEventTypeContextBoundary,
+		ChatID:          event.ChatID,
+		ContextBoundary: &boundary,
+	})
+	p.publishEvent(event.ChatID, codersdk.ChatStreamEvent{
 		Type:   codersdk.ChatStreamEventTypeContextCleared,
-		ChatID: chatID,
+		ChatID: event.ChatID,
 		ContextCleared: &codersdk.ChatStreamContextCleared{
-			ChatID: chatID,
+			ChatID: event.ChatID,
 		},
 	})
-	p.publishChatStreamNotify(chatID, coderdpubsub.ChatStreamNotifyMessage{
-		ContextCleared: true,
+	p.publishChatStreamNotify(event.ChatID, coderdpubsub.ChatStreamNotifyMessage{
+		ContextBoundary: &boundary,
+		ContextCleared:  true,
 	})
 }
 
@@ -7222,8 +7245,49 @@ func (p *Server) persistChatContextSummary(
 		if txErr != nil {
 			return xerrors.Errorf("insert summary messages: %w", txErr)
 		}
+		if len(allInserted) != 3 {
+			return xerrors.Errorf("insert summary messages: expected 3 messages, got %d", len(allInserted))
+		}
+
+		summaryMessage := allInserted[0]
+		summaryEvent, err := tx.GetChatMessageCreatedEventByChatIDAndMessageID(ctx, database.GetChatMessageCreatedEventByChatIDAndMessageIDParams{
+			ChatID:    chatID,
+			MessageID: summaryMessage.ID,
+		})
+		boundaryAfterEventID := sql.NullInt64{}
+		switch {
+		case err == nil:
+			boundaryAfterEventID = sql.NullInt64{Int64: summaryEvent.ID, Valid: true}
+		case errors.Is(err, sql.ErrNoRows):
+			maxEventID, maxErr := tx.GetMaxChatEventIDByChatID(ctx, chatID)
+			if maxErr != nil {
+				return xerrors.Errorf("get max chat event id: %w", maxErr)
+			}
+			if maxEventID > 0 {
+				boundaryAfterEventID = sql.NullInt64{Int64: maxEventID, Valid: true}
+			}
+		default:
+			return xerrors.Errorf("get summary message event: %w", err)
+		}
+
+		_, err = tx.InsertChatContextBoundaryEvent(ctx, database.InsertChatContextBoundaryEventParams{
+			ChatID:                   chatID,
+			BoundaryKind:             "compact",
+			BoundarySource:           "automatic",
+			BoundaryScope:            "chat",
+			BoundaryAfterEventID:     boundaryAfterEventID,
+			BoundarySummaryMessageID: sql.NullInt64{Int64: summaryMessage.ID, Valid: true},
+			Visible:                  false,
+			CreatedBy:                summaryMessage.CreatedBy,
+			CreatedAt:                sql.NullTime{},
+			Metadata:                 pqtype.NullRawMessage{},
+		})
+		if err != nil {
+			return xerrors.Errorf("insert compact boundary event: %w", err)
+		}
+
 		// Skip the first message (hidden summary user msg) when
-		// publishing — only the assistant and tool messages are
+		// publishing, only the assistant and tool messages are
 		// visible to subscribers.
 		insertedMessages = allInserted[1:]
 

@@ -5724,10 +5724,18 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 		require.True(t, resp.CommandResult.Success)
 		require.Empty(t, resp.CommandResult.Message)
 
+		require.NotNil(t, before.Events)
+		require.Empty(t, before.ContextClears)
+
 		after, err := client.GetChatMessages(ctx, chat.ID, nil)
 		require.NoError(t, err)
 		require.Equal(t, before.Messages, after.Messages)
 		require.Equal(t, before.QueuedMessages, after.QueuedMessages)
+		require.NotNil(t, after.Events)
+		require.Len(t, after.Events, len(before.Events)+1)
+		require.Equal(t, codersdk.ChatEventTypeContextBoundary, after.Events[len(after.Events)-1].Type)
+		require.NotNil(t, after.Events[len(after.Events)-1].ContextBoundary)
+		require.Equal(t, "clear", after.Events[len(after.Events)-1].ContextBoundary.Kind)
 		require.Empty(t, before.ContextClears)
 		require.Len(t, after.ContextClears, 1)
 		require.Equal(t, chat.ID, after.ContextClears[0].ChatID)

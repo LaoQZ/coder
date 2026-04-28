@@ -784,13 +784,50 @@ func (s *MethodTestSuite) TestChats() {
 		dbm.EXPECT().GetChatMessagesByChatIDDescPaginated(gomock.Any(), arg).Return(msgs, nil).AnyTimes()
 		check.Args(arg).Asserts(chat, policy.ActionRead).Returns(msgs)
 	}))
-	s.Run("GetChatContextClearMessagesByChatID", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
+	s.Run("GetChatMessageCreatedEventByChatIDAndMessageID", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
 		chat := testutil.Fake(s.T(), faker, database.Chat{})
-		msgs := []database.ChatMessage{testutil.Fake(s.T(), faker, database.ChatMessage{ChatID: chat.ID})}
-		arg := database.GetChatContextClearMessagesByChatIDParams{ChatID: chat.ID, MessageText: "clear"}
+		event := testutil.Fake(s.T(), faker, database.ChatEvent{ChatID: chat.ID})
+		arg := database.GetChatMessageCreatedEventByChatIDAndMessageIDParams{ChatID: chat.ID, MessageID: 123}
 		dbm.EXPECT().GetChatByID(gomock.Any(), chat.ID).Return(chat, nil).AnyTimes()
-		dbm.EXPECT().GetChatContextClearMessagesByChatID(gomock.Any(), arg).Return(msgs, nil).AnyTimes()
-		check.Args(arg).Asserts(chat, policy.ActionRead).Returns(msgs)
+		dbm.EXPECT().GetChatMessageCreatedEventByChatIDAndMessageID(gomock.Any(), arg).Return(event, nil).AnyTimes()
+		check.Args(arg).Asserts(chat, policy.ActionRead).Returns(event)
+	}))
+	s.Run("GetChatMessagePageEventsAndVisibleBoundaries", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
+		chat := testutil.Fake(s.T(), faker, database.Chat{})
+		rows := []database.GetChatMessagePageEventsAndVisibleBoundariesRow{{ChatID: chat.ID, ID: 1}}
+		arg := database.GetChatMessagePageEventsAndVisibleBoundariesParams{ChatID: chat.ID, BeforeID: 0, LimitVal: 50}
+		dbm.EXPECT().GetChatByID(gomock.Any(), chat.ID).Return(chat, nil).AnyTimes()
+		dbm.EXPECT().GetChatMessagePageEventsAndVisibleBoundaries(gomock.Any(), arg).Return(rows, nil).AnyTimes()
+		check.Args(arg).Asserts(chat, policy.ActionRead).Returns(rows)
+	}))
+	s.Run("GetChatTimelineEventsByChatIDDescPaginated", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
+		chat := testutil.Fake(s.T(), faker, database.Chat{})
+		events := []database.ChatEvent{testutil.Fake(s.T(), faker, database.ChatEvent{ChatID: chat.ID})}
+		arg := database.GetChatTimelineEventsByChatIDDescPaginatedParams{ChatID: chat.ID, BeforeID: 0, LimitVal: 50}
+		dbm.EXPECT().GetChatByID(gomock.Any(), chat.ID).Return(chat, nil).AnyTimes()
+		dbm.EXPECT().GetChatTimelineEventsByChatIDDescPaginated(gomock.Any(), arg).Return(events, nil).AnyTimes()
+		check.Args(arg).Asserts(chat, policy.ActionRead).Returns(events)
+	}))
+	s.Run("GetLatestChatContextBoundaryEventByChatID", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
+		chat := testutil.Fake(s.T(), faker, database.Chat{})
+		event := testutil.Fake(s.T(), faker, database.ChatEvent{ChatID: chat.ID})
+		dbm.EXPECT().GetChatByID(gomock.Any(), chat.ID).Return(chat, nil).AnyTimes()
+		dbm.EXPECT().GetLatestChatContextBoundaryEventByChatID(gomock.Any(), chat.ID).Return(event, nil).AnyTimes()
+		check.Args(chat.ID).Asserts(chat, policy.ActionRead).Returns(event)
+	}))
+	s.Run("GetMaxChatEventIDByChatID", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
+		chat := testutil.Fake(s.T(), faker, database.Chat{})
+		dbm.EXPECT().GetChatByID(gomock.Any(), chat.ID).Return(chat, nil).AnyTimes()
+		dbm.EXPECT().GetMaxChatEventIDByChatID(gomock.Any(), chat.ID).Return(int64(123), nil).AnyTimes()
+		check.Args(chat.ID).Asserts(chat, policy.ActionRead).Returns(int64(123))
+	}))
+	s.Run("InsertChatContextBoundaryEvent", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
+		chat := testutil.Fake(s.T(), faker, database.Chat{})
+		event := testutil.Fake(s.T(), faker, database.ChatEvent{ChatID: chat.ID})
+		arg := database.InsertChatContextBoundaryEventParams{ChatID: chat.ID, BoundaryKind: "clear", BoundarySource: "user", BoundaryScope: "chat", Visible: true}
+		dbm.EXPECT().GetChatByID(gomock.Any(), chat.ID).Return(chat, nil).AnyTimes()
+		dbm.EXPECT().InsertChatContextBoundaryEvent(gomock.Any(), arg).Return(event, nil).AnyTimes()
+		check.Args(arg).Asserts(chat, policy.ActionUpdate).Returns(event)
 	}))
 	s.Run("GetLastChatMessageByRole", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
 		chat := testutil.Fake(s.T(), faker, database.Chat{})

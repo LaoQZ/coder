@@ -1336,6 +1336,22 @@ export interface ChatConfig {
 
 // From codersdk/chats.go
 /**
+ * ChatContextBoundary marks a boundary in model context assembly.
+ */
+export interface ChatContextBoundary {
+	readonly kind: string;
+	readonly source: string;
+	readonly scope: string;
+	readonly after_event_id?: number;
+	readonly summary_message_id?: number;
+	readonly visible: boolean;
+	readonly created_by?: string;
+	// empty interface{} type, falling back to unknown
+	readonly metadata: Record<string, unknown>;
+}
+
+// From codersdk/chats.go
+/**
  * ChatContextClear marks where a user cleared model context in a chat.
  */
 export interface ChatContextClear {
@@ -1641,6 +1657,27 @@ export interface ChatDiffStatus {
 
 // From codersdk/chats.go
 /**
+ * ChatEvent is an entry in a chat timeline.
+ */
+export interface ChatEvent {
+	readonly id: number;
+	readonly chat_id: string;
+	readonly type: ChatEventType;
+	readonly message?: ChatMessage;
+	readonly context_boundary?: ChatContextBoundary;
+	readonly created_at: string;
+}
+
+// From codersdk/chats.go
+export type ChatEventType = "context_boundary" | "message_created";
+
+export const ChatEventTypes: ChatEventType[] = [
+	"context_boundary",
+	"message_created",
+];
+
+// From codersdk/chats.go
+/**
  * ChatFileMetadata contains lightweight metadata about a file
  * associated with a chat, excluding the file content itself.
  */
@@ -1889,6 +1926,7 @@ export interface ChatMessagesPaginationOptions {
 export interface ChatMessagesResponse {
 	readonly messages: readonly ChatMessage[];
 	readonly queued_messages: readonly ChatQueuedMessage[];
+	readonly events: readonly ChatEvent[];
 	readonly context_clears?: readonly ChatContextClear[];
 	readonly has_more: boolean;
 }
@@ -2263,6 +2301,25 @@ export interface ChatStreamActionRequired {
 
 // From codersdk/chats.go
 /**
+ * ChatStreamContextBoundary is the payload of a context_boundary stream event.
+ */
+export interface ChatStreamContextBoundary {
+	readonly chat_id: string;
+	readonly event_id: number;
+	readonly kind: string;
+	readonly source: string;
+	readonly scope: string;
+	readonly visible: boolean;
+	readonly after_event_id?: number;
+	readonly summary_message_id?: number;
+	readonly created_by?: string;
+	readonly created_at: string;
+	// empty interface{} type, falling back to unknown
+	readonly metadata: Record<string, unknown>;
+}
+
+// From codersdk/chats.go
+/**
  * ChatStreamContextCleared is the payload of a context_cleared stream event.
  */
 export interface ChatStreamContextCleared {
@@ -2316,11 +2373,13 @@ export interface ChatStreamEvent {
 	readonly queued_messages?: readonly ChatQueuedMessage[];
 	readonly action_required?: ChatStreamActionRequired;
 	readonly context_cleared?: ChatStreamContextCleared;
+	readonly context_boundary?: ChatStreamContextBoundary;
 }
 
 // From codersdk/chats.go
 export type ChatStreamEventType =
 	| "action_required"
+	| "context_boundary"
 	| "context_cleared"
 	| "error"
 	| "message"
@@ -2331,6 +2390,7 @@ export type ChatStreamEventType =
 
 export const ChatStreamEventTypes: ChatStreamEventType[] = [
 	"action_required",
+	"context_boundary",
 	"context_cleared",
 	"error",
 	"message",

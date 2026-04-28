@@ -1436,7 +1436,19 @@ func jsonOrEmptyMap(rawMessage pqtype.NullRawMessage) map[string]any {
 
 	err := json.Unmarshal(rawMessage.RawMessage, &m)
 	if err != nil {
-		// Don't reuse m
+		// Don't reuse m.
+		return map[string]any{}
+	}
+	return m
+}
+
+func rawJSONOrEmptyMap(rawMessage json.RawMessage) map[string]any {
+	if len(rawMessage) == 0 || string(rawMessage) == "null" {
+		return map[string]any{}
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(rawMessage, &m); err != nil || m == nil {
 		return map[string]any{}
 	}
 	return m
@@ -1472,21 +1484,133 @@ func ChatMessage(m database.ChatMessage) codersdk.ChatMessage {
 	return msg
 }
 
-// ChatContextClear converts a hidden clear boundary to SDK metadata.
-func ChatContextClear(m database.ChatMessage) codersdk.ChatContextClear {
-	return codersdk.ChatContextClear{
-		ID:        m.ID,
-		ChatID:    m.ChatID,
-		CreatedBy: nullUUIDPtr(m.CreatedBy),
-		CreatedAt: m.CreatedAt,
+// ChatContextBoundary converts a context boundary event to SDK metadata.
+func ChatContextBoundary(event database.ChatEvent) codersdk.ChatContextBoundary {
+	return codersdk.ChatContextBoundary{
+		Kind:             event.BoundaryKind.String,
+		Source:           event.BoundarySource.String,
+		Scope:            event.BoundaryScope,
+		AfterEventID:     nullInt64Ptr(event.BoundaryAfterEventID),
+		SummaryMessageID: nullInt64Ptr(event.BoundarySummaryMessageID),
+		Visible:          event.Visible,
+		CreatedBy:        nullUUIDPtr(event.CreatedBy),
+		Metadata:         rawJSONOrEmptyMap(event.Metadata),
 	}
 }
 
-// ChatContextClears converts hidden clear boundaries to SDK metadata.
-func ChatContextClears(messages []database.ChatMessage) []codersdk.ChatContextClear {
-	out := make([]codersdk.ChatContextClear, 0, len(messages))
-	for _, message := range messages {
-		out = append(out, ChatContextClear(message))
+// ChatStreamContextBoundary converts a context boundary event for streaming.
+func ChatStreamContextBoundary(event database.ChatEvent) codersdk.ChatStreamContextBoundary {
+	return codersdk.ChatStreamContextBoundary{
+		ChatID:           event.ChatID,
+		EventID:          event.ID,
+		Kind:             event.BoundaryKind.String,
+		Source:           event.BoundarySource.String,
+		Scope:            event.BoundaryScope,
+		Visible:          event.Visible,
+		AfterEventID:     nullInt64Ptr(event.BoundaryAfterEventID),
+		SummaryMessageID: nullInt64Ptr(event.BoundarySummaryMessageID),
+		CreatedBy:        nullUUIDPtr(event.CreatedBy),
+		CreatedAt:        event.CreatedAt,
+		Metadata:         rawJSONOrEmptyMap(event.Metadata),
+	}
+}
+
+// ChatEvent converts a timeline event to its SDK representation.
+func ChatEvent(event database.ChatEvent, message *database.ChatMessage) codersdk.ChatEvent {
+	sdkEvent := codersdk.ChatEvent{
+		ID:        event.ID,
+		ChatID:    event.ChatID,
+		Type:      codersdk.ChatEventType(event.Kind),
+		CreatedAt: event.CreatedAt,
+	}
+
+	switch codersdk.ChatEventType(event.Kind) {
+	case codersdk.ChatEventTypeMessageCreated:
+		if message != nil {
+			sdkMessage := ChatMessage(*message)
+			sdkEvent.Message = &sdkMessage
+		}
+	case codersdk.ChatEventTypeContextBoundary:
+		boundary := ChatContextBoundary(event)
+		sdkEvent.ContextBoundary = &boundary
+	}
+	return sdkEvent
+}
+
+// ChatEvents converts timeline events to SDK representations.
+func ChatEvents(events []database.ChatEvent, messages map[int64]database.ChatMessage) []codersdk.ChatEvent {
+	out := make([]codersdk.ChatEvent, 0, len(events))
+	for _, event := range events {
+		var message *database.ChatMessage
+		if event.MessageID.Valid {
+			if matched, ok := messages[event.MessageID.Int64]; ok {
+				message = &matched
+			}
+		}
+		out = append(out, ChatEvent(event, message))
+	}
+	return out
+}
+
+func chatEventFromProjection(row database.GetChatMessagePageEventsAndVisibleBoundariesRow) database.ChatEvent {
+	return database.ChatEvent{
+		ID:                       row.ID,
+		ChatID:                   row.ChatID,
+		Kind:                     row.Kind,
+		MessageID:                row.MessageID,
+		BoundaryKind:             row.BoundaryKind,
+		BoundarySource:           row.BoundarySource,
+		BoundaryScope:            row.BoundaryScope,
+		BoundaryAfterEventID:     row.BoundaryAfterEventID,
+		BoundarySummaryMessageID: row.BoundarySummaryMessageID,
+		Visible:                  row.Visible,
+		CreatedBy:                row.CreatedBy,
+		CreatedAt:                row.CreatedAt,
+		Metadata:                 row.Metadata,
+	}
+}
+
+// ChatEventFromMessagePageEvent converts a projection row to an SDK event.
+func ChatEventFromMessagePageEvent(row database.GetChatMessagePageEventsAndVisibleBoundariesRow, messages map[int64]database.ChatMessage) codersdk.ChatEvent {
+	event := chatEventFromProjection(row)
+	var message *database.ChatMessage
+	if row.MessageID.Valid {
+		if matched, ok := messages[row.MessageID.Int64]; ok {
+			message = &matched
+		}
+	}
+	return ChatEvent(event, message)
+}
+
+// ChatEventsFromMessagePageEvents converts projection rows to SDK events.
+func ChatEventsFromMessagePageEvents(rows []database.GetChatMessagePageEventsAndVisibleBoundariesRow, messages map[int64]database.ChatMessage) []codersdk.ChatEvent {
+	out := make([]codersdk.ChatEvent, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, ChatEventFromMessagePageEvent(row, messages))
+	}
+	return out
+}
+
+// ChatContextClear converts a visible clear boundary to SDK metadata.
+func ChatContextClear(row database.GetChatMessagePageEventsAndVisibleBoundariesRow) codersdk.ChatContextClear {
+	return codersdk.ChatContextClear{
+		ID:        row.LegacyPlacementMessageID,
+		ChatID:    row.ChatID,
+		CreatedBy: nullUUIDPtr(row.CreatedBy),
+		CreatedAt: row.CreatedAt,
+	}
+}
+
+// ChatContextClears converts visible clear boundaries to SDK metadata.
+func ChatContextClears(rows []database.GetChatMessagePageEventsAndVisibleBoundariesRow) []codersdk.ChatContextClear {
+	out := make([]codersdk.ChatContextClear, 0, len(rows))
+	for _, row := range rows {
+		if row.Kind != string(codersdk.ChatEventTypeContextBoundary) ||
+			row.BoundaryKind.String != "clear" ||
+			row.LegacyPlacementMessageID <= 0 {
+			continue
+		}
+		out = append(out, ChatContextClear(row))
 	}
 	return out
 }

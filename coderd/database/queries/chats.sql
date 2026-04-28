@@ -273,27 +273,6 @@ ORDER BY
 LIMIT
     COALESCE(NULLIF(@limit_val::int, 0), 50);
 
--- The marker text is schema-bound to chatd.ClearChatContextMessageText. It
--- distinguishes clear boundaries from other compressed model-only messages.
--- Do not change it without preserving historical marker visibility.
--- name: GetChatContextClearMessagesByChatID :many
-SELECT
-    *
-FROM
-    chat_messages
-WHERE
-    chat_id = @chat_id::uuid
-    AND compressed = true
-    AND deleted = false
-    AND role = 'user'
-    AND visibility = 'model'
-    AND jsonb_typeof(content) = 'array'
-    AND jsonb_array_length(content) = 1
-    AND content->0->>'type' = 'text'
-    AND content->0->>'text' = @message_text::text
-ORDER BY
-    id ASC;
-
 -- name: InsertChatContextBoundaryEvent :one
 INSERT INTO chat_events (
     chat_id,

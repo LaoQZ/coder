@@ -2588,14 +2588,6 @@ func (q *querier) GetChatByIDForUpdate(ctx context.Context, id uuid.UUID) (datab
 	return fetch(q.log, q.auth, q.db.GetChatByIDForUpdate)(ctx, id)
 }
 
-func (q *querier) GetChatContextClearMessagesByChatID(ctx context.Context, arg database.GetChatContextClearMessagesByChatIDParams) ([]database.ChatMessage, error) {
-	_, err := q.GetChatByID(ctx, arg.ChatID)
-	if err != nil {
-		return nil, err
-	}
-	return q.db.GetChatContextClearMessagesByChatID(ctx, arg)
-}
-
 func (q *querier) GetChatCostPerChat(ctx context.Context, arg database.GetChatCostPerChatParams) ([]database.GetChatCostPerChatRow, error) {
 	// The owner's chats, may cross orgs. AnyOrganization() authorizes
 	// the caller if they hold read permission on chats owned by

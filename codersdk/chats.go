@@ -508,6 +508,36 @@ type UploadChatFileResponse struct {
 	ID uuid.UUID `json:"id" format:"uuid"`
 }
 
+// ChatEventType represents the kind of event in the chat timeline.
+type ChatEventType string
+
+const (
+	ChatEventTypeMessageCreated  ChatEventType = "message_created"
+	ChatEventTypeContextBoundary ChatEventType = "context_boundary"
+)
+
+// ChatContextBoundary marks a boundary in model context assembly.
+type ChatContextBoundary struct {
+	Kind             string         `json:"kind"`
+	Source           string         `json:"source"`
+	Scope            string         `json:"scope"`
+	AfterEventID     *int64         `json:"after_event_id,omitempty"`
+	SummaryMessageID *int64         `json:"summary_message_id,omitempty"`
+	Visible          bool           `json:"visible"`
+	CreatedBy        *uuid.UUID     `json:"created_by,omitempty" format:"uuid"`
+	Metadata         map[string]any `json:"metadata"`
+}
+
+// ChatEvent is an entry in a chat timeline.
+type ChatEvent struct {
+	ID              int64                `json:"id"`
+	ChatID          uuid.UUID            `json:"chat_id" format:"uuid"`
+	Type            ChatEventType        `json:"type"`
+	Message         *ChatMessage         `json:"message,omitempty"`
+	ContextBoundary *ChatContextBoundary `json:"context_boundary,omitempty"`
+	CreatedAt       time.Time            `json:"created_at" format:"date-time"`
+}
+
 // ChatContextClear marks where a user cleared model context in a chat.
 type ChatContextClear struct {
 	ID        int64      `json:"id"`
@@ -520,6 +550,7 @@ type ChatContextClear struct {
 type ChatMessagesResponse struct {
 	Messages       []ChatMessage       `json:"messages"`
 	QueuedMessages []ChatQueuedMessage `json:"queued_messages"`
+	Events         []ChatEvent         `json:"events"`
 	ContextClears  []ChatContextClear  `json:"context_clears,omitempty"`
 	HasMore        bool                `json:"has_more"`
 }
@@ -1272,19 +1303,35 @@ func IsChatGitWatchFallbackMessage(msg string) bool {
 type ChatStreamEventType string
 
 const (
-	ChatStreamEventTypeMessagePart    ChatStreamEventType = "message_part"
-	ChatStreamEventTypeMessage        ChatStreamEventType = "message"
-	ChatStreamEventTypeStatus         ChatStreamEventType = "status"
-	ChatStreamEventTypeError          ChatStreamEventType = "error"
-	ChatStreamEventTypeQueueUpdate    ChatStreamEventType = "queue_update"
-	ChatStreamEventTypeRetry          ChatStreamEventType = "retry"
-	ChatStreamEventTypeActionRequired ChatStreamEventType = "action_required"
-	ChatStreamEventTypeContextCleared ChatStreamEventType = "context_cleared"
+	ChatStreamEventTypeMessagePart     ChatStreamEventType = "message_part"
+	ChatStreamEventTypeMessage         ChatStreamEventType = "message"
+	ChatStreamEventTypeStatus          ChatStreamEventType = "status"
+	ChatStreamEventTypeError           ChatStreamEventType = "error"
+	ChatStreamEventTypeQueueUpdate     ChatStreamEventType = "queue_update"
+	ChatStreamEventTypeRetry           ChatStreamEventType = "retry"
+	ChatStreamEventTypeActionRequired  ChatStreamEventType = "action_required"
+	ChatStreamEventTypeContextCleared  ChatStreamEventType = "context_cleared"
+	ChatStreamEventTypeContextBoundary ChatStreamEventType = "context_boundary"
 )
 
 // ChatStreamContextCleared is the payload of a context_cleared stream event.
 type ChatStreamContextCleared struct {
 	ChatID uuid.UUID `json:"chat_id" format:"uuid"`
+}
+
+// ChatStreamContextBoundary is the payload of a context_boundary stream event.
+type ChatStreamContextBoundary struct {
+	ChatID           uuid.UUID      `json:"chat_id" format:"uuid"`
+	EventID          int64          `json:"event_id"`
+	Kind             string         `json:"kind"`
+	Source           string         `json:"source"`
+	Scope            string         `json:"scope"`
+	Visible          bool           `json:"visible"`
+	AfterEventID     *int64         `json:"after_event_id,omitempty"`
+	SummaryMessageID *int64         `json:"summary_message_id,omitempty"`
+	CreatedBy        *uuid.UUID     `json:"created_by,omitempty" format:"uuid"`
+	CreatedAt        time.Time      `json:"created_at" format:"date-time"`
+	Metadata         map[string]any `json:"metadata"`
 }
 
 // ChatQueuedMessage represents a queued message waiting to be processed.
@@ -1451,16 +1498,17 @@ type ChatWatchEvent struct {
 
 // ChatStreamEvent represents a real-time update for chat streaming.
 type ChatStreamEvent struct {
-	Type           ChatStreamEventType       `json:"type"`
-	ChatID         uuid.UUID                 `json:"chat_id" format:"uuid"`
-	Message        *ChatMessage              `json:"message,omitempty"`
-	MessagePart    *ChatStreamMessagePart    `json:"message_part,omitempty"`
-	Status         *ChatStreamStatus         `json:"status,omitempty"`
-	Error          *ChatStreamError          `json:"error,omitempty"`
-	Retry          *ChatStreamRetry          `json:"retry,omitempty"`
-	QueuedMessages []ChatQueuedMessage       `json:"queued_messages,omitempty"`
-	ActionRequired *ChatStreamActionRequired `json:"action_required,omitempty"`
-	ContextCleared *ChatStreamContextCleared `json:"context_cleared,omitempty"`
+	Type            ChatStreamEventType        `json:"type"`
+	ChatID          uuid.UUID                  `json:"chat_id" format:"uuid"`
+	Message         *ChatMessage               `json:"message,omitempty"`
+	MessagePart     *ChatStreamMessagePart     `json:"message_part,omitempty"`
+	Status          *ChatStreamStatus          `json:"status,omitempty"`
+	Error           *ChatStreamError           `json:"error,omitempty"`
+	Retry           *ChatStreamRetry           `json:"retry,omitempty"`
+	QueuedMessages  []ChatQueuedMessage        `json:"queued_messages,omitempty"`
+	ActionRequired  *ChatStreamActionRequired  `json:"action_required,omitempty"`
+	ContextCleared  *ChatStreamContextCleared  `json:"context_cleared,omitempty"`
+	ContextBoundary *ChatStreamContextBoundary `json:"context_boundary,omitempty"`
 }
 
 // ChatCostSummaryOptions are optional query parameters for GetChatCostSummary.

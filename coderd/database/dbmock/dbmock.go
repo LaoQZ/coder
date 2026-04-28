@@ -2101,21 +2101,6 @@ func (mr *MockStoreMockRecorder) GetChatByIDForUpdate(ctx, id any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChatByIDForUpdate", reflect.TypeOf((*MockStore)(nil).GetChatByIDForUpdate), ctx, id)
 }
 
-// GetChatContextClearMessagesByChatID mocks base method.
-func (m *MockStore) GetChatContextClearMessagesByChatID(ctx context.Context, arg database.GetChatContextClearMessagesByChatIDParams) ([]database.ChatMessage, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChatContextClearMessagesByChatID", ctx, arg)
-	ret0, _ := ret[0].([]database.ChatMessage)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetChatContextClearMessagesByChatID indicates an expected call of GetChatContextClearMessagesByChatID.
-func (mr *MockStoreMockRecorder) GetChatContextClearMessagesByChatID(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChatContextClearMessagesByChatID", reflect.TypeOf((*MockStore)(nil).GetChatContextClearMessagesByChatID), ctx, arg)
-}
-
 // GetChatCostPerChat mocks base method.
 func (m *MockStore) GetChatCostPerChat(ctx context.Context, arg database.GetChatCostPerChatParams) ([]database.GetChatCostPerChatRow, error) {
 	m.ctrl.T.Helper()

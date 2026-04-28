@@ -883,6 +883,12 @@ const AgentChatPage: FC = () => {
 		return deduped;
 	})();
 
+	const chatEvents = (() => {
+		const pages = chatMessagesQuery.data?.pages;
+		if (!pages || pages.length === 0) return undefined;
+		return pages.flatMap((page) => page.events);
+	})();
+
 	// Build a synthetic ChatMessagesResponse from the flattened
 	// data for backward compat with useChatStore.
 	const chatMessagesData: TypesGen.ChatMessagesResponse | undefined =
@@ -890,6 +896,7 @@ const AgentChatPage: FC = () => {
 			? {
 					messages: chatMessagesList,
 					queued_messages: chatQueuedMessages ?? [],
+					events: chatEvents ?? [],
 					context_clears: chatContextClears ?? [],
 					has_more: chatMessagesQuery.data?.pages.at(-1)?.has_more ?? false,
 				}

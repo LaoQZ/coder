@@ -1748,22 +1748,35 @@ func (api *API) getChatMessages(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	contextClearMessages, err := api.Database.GetChatContextClearMessagesByChatID(ctx, database.GetChatContextClearMessagesByChatIDParams{
-		ChatID:      chatID,
-		MessageText: chatd.ClearChatContextMessageText,
-	})
-	if err != nil {
-		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
-			Message: "Failed to get chat context clears.",
-			Detail:  err.Error(),
-		})
-		return
+	messageMap := make(map[int64]database.ChatMessage, len(messages))
+	for _, message := range messages {
+		messageMap[message.ID] = message
 	}
+
+	var pageEvents []database.GetChatMessagePageEventsAndVisibleBoundariesRow
+	if len(messages) > 0 {
+		pageEvents, err = api.Database.GetChatMessagePageEventsAndVisibleBoundaries(ctx, database.GetChatMessagePageEventsAndVisibleBoundariesParams{
+			ChatID:   chatID,
+			BeforeID: beforeID,
+			LimitVal: limit,
+		})
+		if err != nil {
+			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+				Message: "Failed to get chat timeline events.",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
+	events := db2sdk.ChatEventsFromMessagePageEvents(pageEvents, messageMap)
+	contextClears := db2sdk.ChatContextClears(pageEvents)
 
 	httpapi.Write(ctx, rw, http.StatusOK, codersdk.ChatMessagesResponse{
 		Messages:       convertChatMessages(messages),
 		QueuedMessages: convertChatQueuedMessages(queuedMessages),
-		ContextClears:  db2sdk.ChatContextClears(contextClearMessages),
+		Events:         events,
+		ContextClears:  contextClears,
 		HasMore:        hasMore,
 	})
 }
@@ -2537,7 +2550,7 @@ func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 
 	switch classifyClearChatCommand(req.Content) {
 	case clearChatCommandValid:
-		clearErr := api.chatDaemon.ClearChatContext(ctx, chatID, apiKey.UserID)
+		_, clearErr := api.chatDaemon.ClearChatContext(ctx, chatID, apiKey.UserID)
 		if clearErr != nil {
 			switch {
 			case xerrors.Is(clearErr, chatd.ErrChatArchived):

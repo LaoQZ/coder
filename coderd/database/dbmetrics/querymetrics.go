@@ -1144,14 +1144,6 @@ func (m queryMetricsStore) GetChatByIDForUpdate(ctx context.Context, id uuid.UUI
 	return r0, r1
 }
 
-func (m queryMetricsStore) GetChatContextClearMessagesByChatID(ctx context.Context, arg database.GetChatContextClearMessagesByChatIDParams) ([]database.ChatMessage, error) {
-	start := time.Now()
-	r0, r1 := m.s.GetChatContextClearMessagesByChatID(ctx, arg)
-	m.queryLatencies.WithLabelValues("GetChatContextClearMessagesByChatID").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatContextClearMessagesByChatID").Inc()
-	return r0, r1
-}
-
 func (m queryMetricsStore) GetChatCostPerChat(ctx context.Context, arg database.GetChatCostPerChatParams) ([]database.GetChatCostPerChatRow, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetChatCostPerChat(ctx, arg)
