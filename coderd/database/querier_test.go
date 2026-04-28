@@ -10111,6 +10111,19 @@ func TestGetChatMessagesForPromptByChatID(t *testing.T) {
 		return results[0]
 	}
 
+	insertCompactionBoundary := func(t *testing.T, chatID uuid.UUID, summaryID int64) {
+		t.Helper()
+		_, err := db.InsertChatContextBoundaryEvent(ctx, database.InsertChatContextBoundaryEventParams{
+			ChatID:                   chatID,
+			BoundaryKind:             "compact",
+			BoundarySource:           "automatic",
+			BoundaryScope:            "chat",
+			BoundarySummaryMessageID: sql.NullInt64{Int64: summaryID, Valid: true},
+			Visible:                  false,
+		})
+		require.NoError(t, err)
+	}
+
 	msgIDs := func(msgs []database.ChatMessage) []int64 {
 		ids := make([]int64, len(msgs))
 		for i, m := range msgs {
@@ -10163,6 +10176,7 @@ func TestGetChatMessagesForPromptByChatID(t *testing.T) {
 		// Compaction messages:
 		// 1. Summary (role=user, visibility=model, compressed=true).
 		summary := insertMsg(t, chat.ID, database.ChatMessageRoleUser, database.ChatMessageVisibilityModel, true, "compaction summary")
+		insertCompactionBoundary(t, chat.ID, summary.ID)
 		// 2. Compressed assistant tool-call (visibility=user).
 		insertMsg(t, chat.ID, database.ChatMessageRoleAssistant, database.ChatMessageVisibilityUser, true, "tool call")
 		// 3. Compressed tool result (visibility=both).
@@ -10200,6 +10214,7 @@ func TestGetChatMessagesForPromptByChatID(t *testing.T) {
 		// non-system message in the prompt.
 		insertMsg(t, chat.ID, database.ChatMessageRoleSystem, database.ChatMessageVisibilityModel, false, "system prompt")
 		summary := insertMsg(t, chat.ID, database.ChatMessageRoleUser, database.ChatMessageVisibilityModel, true, "summary text")
+		insertCompactionBoundary(t, chat.ID, summary.ID)
 		newUsr := insertMsg(t, chat.ID, database.ChatMessageRoleUser, database.ChatMessageVisibilityBoth, false, "new question")
 
 		got, err := db.GetChatMessagesForPromptByChatID(ctx, chat.ID)
@@ -10228,6 +10243,7 @@ func TestGetChatMessagesForPromptByChatID(t *testing.T) {
 		// instead of the actual summary.
 		insertMsg(t, chat.ID, database.ChatMessageRoleSystem, database.ChatMessageVisibilityModel, false, "system prompt")
 		summary := insertMsg(t, chat.ID, database.ChatMessageRoleUser, database.ChatMessageVisibilityModel, true, "real summary")
+		insertCompactionBoundary(t, chat.ID, summary.ID)
 		compressedTool := insertMsg(t, chat.ID, database.ChatMessageRoleTool, database.ChatMessageVisibilityBoth, true, "tool result")
 		postUser := insertMsg(t, chat.ID, database.ChatMessageRoleUser, database.ChatMessageVisibilityBoth, false, "follow-up")
 
