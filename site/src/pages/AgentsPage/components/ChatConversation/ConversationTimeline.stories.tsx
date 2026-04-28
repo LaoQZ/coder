@@ -230,46 +230,27 @@ const buildUserMessage = ({
 	content: [...(text ? [buildTextPart(text)] : []), ...files],
 });
 
-const buildMessageCreatedEvent = (
-	id: number,
-	message: TypesGen.ChatMessage,
-): TypesGen.ChatEvent => ({
+const buildVisibleClearBoundary = ({
 	id,
-	chat_id: message.chat_id,
-	type: "message_created",
-	message,
-	created_at: message.created_at,
-});
-
-const buildVisibleClearBoundaryEvent = ({
-	id,
-	afterEventID,
+	afterMessageID,
 	createdAt = "2026-03-10T00:01:00.000Z",
 }: {
 	id: number;
-	afterEventID?: number;
+	afterMessageID?: number;
 	createdAt?: string;
-}): TypesGen.ChatEvent => ({
+}): TypesGen.ChatContextBoundary => ({
 	id,
 	chat_id: baseMessage.chat_id,
-	type: "context_boundary",
-	context_boundary: {
-		kind: "clear",
-		source: "user",
-		scope: "chat",
-		...(afterEventID === undefined ? {} : { after_event_id: afterEventID }),
-		visible: true,
-		metadata: {},
-	},
+	kind: "clear",
+	...(afterMessageID === undefined ? {} : { after_message_id: afterMessageID }),
+	visible: true,
 	created_at: createdAt,
+	metadata: {},
 });
 
 const buildStoryArgs = (...messages: TypesGen.ChatMessage[]) => ({
 	...defaultArgs,
 	parsedMessages: buildMessages(messages),
-	events: messages.map((message, index) =>
-		buildMessageCreatedEvent((index + 1) * 2, message),
-	),
 });
 
 const findAttachmentTile = async (
@@ -308,7 +289,7 @@ const defaultArgs: Omit<
 	"parsedMessages"
 > = {
 	subagentTitles: new Map(),
-	events: [],
+	contextBoundaries: [],
 };
 
 const meta: Meta<typeof ConversationTimeline> = {
@@ -381,14 +362,10 @@ export const ClearBoundaryDivider: Story = {
 				buildTextPart("Only messages after the divider are in context."),
 			],
 		};
-		const firstMessageEvent = buildMessageCreatedEvent(2, firstMessage);
-		const secondMessageEvent = buildMessageCreatedEvent(4, secondMessage);
 		return {
 			...defaultArgs,
-			events: [
-				firstMessageEvent,
-				buildVisibleClearBoundaryEvent({ id: 3, afterEventID: 2 }),
-				secondMessageEvent,
+			contextBoundaries: [
+				buildVisibleClearBoundary({ id: 3, afterMessageID: 1 }),
 			],
 			parsedMessages: buildMessages([firstMessage, secondMessage]),
 		};

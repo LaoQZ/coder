@@ -8468,14 +8468,12 @@ func TestSendMessageRejectsArchivedChat(t *testing.T) {
 }
 
 type clearContextBoundaryRow struct {
-	ID                       int64
-	BoundaryKind             string
-	BoundarySource           string
-	BoundaryScope            string
-	BoundaryAfterEventID     sql.NullInt64
-	BoundarySummaryMessageID sql.NullInt64
-	Visible                  bool
-	CreatedBy                sql.NullString
+	ID               int64
+	Kind             string
+	AfterMessageID   sql.NullInt64
+	SummaryMessageID sql.NullInt64
+	Visible          bool
+	CreatedBy        sql.NullString
 }
 
 func clearContextBoundaryRows(
@@ -8487,20 +8485,17 @@ func clearContextBoundaryRows(
 	t.Helper()
 
 	rows, err := sqlDB.QueryContext(ctx, `
-	SELECT
-		id,
-		boundary_kind,
-		boundary_source,
-		boundary_scope,
-		boundary_after_event_id,
-		boundary_summary_message_id,
-		visible,
-		created_by::text
-	FROM chat_events
-	WHERE chat_id = $1
-		AND kind = 'context_boundary'
-	ORDER BY id ASC
-	`, chatID)
+		SELECT
+			id,
+			kind,
+			after_message_id,
+			summary_message_id,
+			visible,
+			created_by::text
+		FROM chat_context_boundaries
+		WHERE chat_id = $1
+		ORDER BY id ASC
+		`, chatID)
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -8509,11 +8504,9 @@ func clearContextBoundaryRows(
 		var row clearContextBoundaryRow
 		err := rows.Scan(
 			&row.ID,
-			&row.BoundaryKind,
-			&row.BoundarySource,
-			&row.BoundaryScope,
-			&row.BoundaryAfterEventID,
-			&row.BoundarySummaryMessageID,
+			&row.Kind,
+			&row.AfterMessageID,
+			&row.SummaryMessageID,
 			&row.Visible,
 			&row.CreatedBy,
 		)
@@ -8675,11 +8668,9 @@ func TestClearChatContextInsertsBoundaryEvent(t *testing.T) {
 	boundaries := clearContextBoundaryRows(ctx, t, sqlDB, chat.ID)
 	require.Len(t, boundaries, 1)
 	boundary := boundaries[0]
-	require.Equal(t, "clear", boundary.BoundaryKind)
-	require.Equal(t, "user", boundary.BoundarySource)
-	require.Equal(t, "chat", boundary.BoundaryScope)
-	require.True(t, boundary.BoundaryAfterEventID.Valid)
-	require.False(t, boundary.BoundarySummaryMessageID.Valid)
+	require.Equal(t, "clear", boundary.Kind)
+	require.True(t, boundary.AfterMessageID.Valid)
+	require.False(t, boundary.SummaryMessageID.Valid)
 	require.True(t, boundary.Visible)
 	require.True(t, boundary.CreatedBy.Valid)
 	require.Equal(t, user.ID.String(), boundary.CreatedBy.String)
@@ -8754,19 +8745,12 @@ func TestClearChatContextBoundariesPreserveHistory(t *testing.T) {
 			"automatic context summary",
 			true,
 		)
-		compactionEvent, err := db.GetChatMessageCreatedEventByChatIDAndMessageID(ctx, database.GetChatMessageCreatedEventByChatIDAndMessageIDParams{
-			ChatID:    chat.ID,
-			MessageID: compaction.ID,
-		})
-		require.NoError(t, err)
-		_, err = db.InsertChatContextBoundaryEvent(ctx, database.InsertChatContextBoundaryEventParams{
-			ChatID:                   chat.ID,
-			BoundaryKind:             "compact",
-			BoundarySource:           "automatic",
-			BoundaryScope:            "chat",
-			BoundaryAfterEventID:     sql.NullInt64{Int64: compactionEvent.ID, Valid: true},
-			BoundarySummaryMessageID: sql.NullInt64{Int64: compaction.ID, Valid: true},
-			Visible:                  false,
+		_, err := db.InsertChatContextBoundary(ctx, database.InsertChatContextBoundaryParams{
+			ChatID:           chat.ID,
+			Kind:             string(codersdk.ChatContextBoundaryKindCompact),
+			AfterMessageID:   sql.NullInt64{Int64: compaction.ID, Valid: true},
+			SummaryMessageID: sql.NullInt64{Int64: compaction.ID, Valid: true},
+			Visible:          false,
 		})
 		require.NoError(t, err)
 
@@ -8777,9 +8761,9 @@ func TestClearChatContextBoundariesPreserveHistory(t *testing.T) {
 		require.Equal(t, visibleBefore, visibleAfter)
 		boundaries := clearContextBoundaryRows(ctx, t, sqlDB, chat.ID)
 		require.Len(t, boundaries, 2)
-		require.Equal(t, "compact", boundaries[0].BoundaryKind)
-		require.Equal(t, compaction.ID, boundaries[0].BoundarySummaryMessageID.Int64)
-		require.Equal(t, "clear", boundaries[1].BoundaryKind)
+		require.Equal(t, "compact", boundaries[0].Kind)
+		require.Equal(t, compaction.ID, boundaries[0].SummaryMessageID.Int64)
+		require.Equal(t, "clear", boundaries[1].Kind)
 		require.Greater(t, boundaries[1].ID, boundaries[0].ID)
 	})
 }
@@ -8934,9 +8918,9 @@ func TestClearChatContextPublishesEvent(t *testing.T) {
 		require.Equal(t, codersdk.ChatStreamEventTypeContextBoundary, gotBoundary.Type)
 		require.Equal(t, chat.ID, gotBoundary.ChatID)
 		require.NotNil(t, gotBoundary.ContextBoundary)
-		require.Equal(t, chat.ID, gotBoundary.ContextBoundary.ChatID)
-		require.Equal(t, "clear", gotBoundary.ContextBoundary.Kind)
-		require.True(t, gotBoundary.ContextBoundary.Visible)
+		require.Equal(t, chat.ID, gotBoundary.ContextBoundary.Boundary.ChatID)
+		require.Equal(t, codersdk.ChatContextBoundaryKindClear, gotBoundary.ContextBoundary.Boundary.Kind)
+		require.True(t, gotBoundary.ContextBoundary.Boundary.Visible)
 	})
 
 	t.Run("Failure", func(t *testing.T) {

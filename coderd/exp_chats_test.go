@@ -5724,22 +5724,20 @@ func TestPostChatMessages_ClearCommand(t *testing.T) {
 		require.True(t, resp.CommandResult.Success)
 		require.Empty(t, resp.CommandResult.Message)
 
-		require.NotNil(t, before.Events)
+		beforeBoundaryCount := len(before.ContextBoundaries)
 
 		after, err := client.GetChatMessages(ctx, chat.ID, nil)
 		require.NoError(t, err)
 		require.Equal(t, before.Messages, after.Messages)
 		require.Equal(t, before.QueuedMessages, after.QueuedMessages)
-		require.NotNil(t, after.Events)
-		require.Len(t, after.Events, len(before.Events)+1)
-		clearEvent := after.Events[len(after.Events)-1]
-		require.Equal(t, codersdk.ChatEventTypeContextBoundary, clearEvent.Type)
-		require.Equal(t, chat.ID, clearEvent.ChatID)
-		require.NotNil(t, clearEvent.ContextBoundary)
-		require.Equal(t, "clear", clearEvent.ContextBoundary.Kind)
-		require.True(t, clearEvent.ContextBoundary.Visible)
-		require.NotNil(t, clearEvent.ContextBoundary.CreatedBy)
-		require.Equal(t, firstUser.UserID, *clearEvent.ContextBoundary.CreatedBy)
+		require.NotNil(t, after.ContextBoundaries)
+		require.Len(t, after.ContextBoundaries, beforeBoundaryCount+1)
+		clearBoundary := after.ContextBoundaries[len(after.ContextBoundaries)-1]
+		require.Equal(t, chat.ID, clearBoundary.ChatID)
+		require.Equal(t, codersdk.ChatContextBoundaryKindClear, clearBoundary.Kind)
+		require.True(t, clearBoundary.Visible)
+		require.NotNil(t, clearBoundary.CreatedBy)
+		require.Equal(t, firstUser.UserID, *clearBoundary.CreatedBy)
 	})
 
 	t.Run("Validation", func(t *testing.T) {

@@ -6318,181 +6318,6 @@ func (q *sqlQuerier) GetChatMessageByID(ctx context.Context, id int64) (ChatMess
 	return i, err
 }
 
-const getChatMessageCreatedEventByChatIDAndMessageID = `-- name: GetChatMessageCreatedEventByChatIDAndMessageID :one
-SELECT
-    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
-FROM
-    chat_events
-WHERE
-    chat_id = $1::uuid
-    AND message_id = $2::bigint
-    AND kind = 'message_created'
-`
-
-type GetChatMessageCreatedEventByChatIDAndMessageIDParams struct {
-	ChatID    uuid.UUID `db:"chat_id" json:"chat_id"`
-	MessageID int64     `db:"message_id" json:"message_id"`
-}
-
-func (q *sqlQuerier) GetChatMessageCreatedEventByChatIDAndMessageID(ctx context.Context, arg GetChatMessageCreatedEventByChatIDAndMessageIDParams) (ChatEvent, error) {
-	row := q.db.QueryRowContext(ctx, getChatMessageCreatedEventByChatIDAndMessageID, arg.ChatID, arg.MessageID)
-	var i ChatEvent
-	err := row.Scan(
-		&i.ID,
-		&i.ChatID,
-		&i.Kind,
-		&i.MessageID,
-		&i.BoundaryKind,
-		&i.BoundarySource,
-		&i.BoundaryScope,
-		&i.BoundaryAfterEventID,
-		&i.BoundarySummaryMessageID,
-		&i.Visible,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.Metadata,
-	)
-	return i, err
-}
-
-const getChatMessagePageEventsAndVisibleBoundaries = `-- name: GetChatMessagePageEventsAndVisibleBoundaries :many
-WITH page_messages AS (
-    SELECT
-        id
-    FROM
-        chat_messages
-    WHERE
-        chat_id = $1::uuid
-        AND CASE
-            WHEN $2::bigint > 0 THEN id < $2::bigint
-            ELSE true
-        END
-        AND visibility IN ('user', 'both')
-        AND deleted = false
-    ORDER BY
-        id DESC
-    LIMIT
-        COALESCE(NULLIF($3::int, 0), 50)
-), page_message_events AS (
-    SELECT
-        chat_events.id,
-        chat_events.chat_id,
-        chat_events.kind,
-        chat_events.message_id,
-        chat_events.boundary_kind,
-        chat_events.boundary_source,
-        chat_events.boundary_scope,
-        chat_events.boundary_after_event_id,
-        chat_events.boundary_summary_message_id,
-        chat_events.visible,
-        chat_events.created_by,
-        chat_events.created_at,
-        chat_events.metadata
-    FROM
-        chat_events
-    JOIN
-        page_messages ON page_messages.id = chat_events.message_id
-    WHERE
-        chat_events.chat_id = $1::uuid
-        AND chat_events.kind = 'message_created'
-), visible_boundaries AS (
-    SELECT
-        chat_events.id,
-        chat_events.chat_id,
-        chat_events.kind,
-        chat_events.message_id,
-        chat_events.boundary_kind,
-        chat_events.boundary_source,
-        chat_events.boundary_scope,
-        chat_events.boundary_after_event_id,
-        chat_events.boundary_summary_message_id,
-        chat_events.visible,
-        chat_events.created_by,
-        chat_events.created_at,
-        chat_events.metadata
-    FROM
-        chat_events
-    WHERE
-        chat_events.chat_id = $1::uuid
-        AND chat_events.kind = 'context_boundary'
-        AND chat_events.visible = true
-)
-SELECT
-    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
-FROM (
-    SELECT
-        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
-    FROM
-        page_message_events
-    UNION ALL
-    SELECT
-        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
-    FROM
-        visible_boundaries
-) AS timeline_events
-ORDER BY
-    id ASC
-`
-
-type GetChatMessagePageEventsAndVisibleBoundariesParams struct {
-	ChatID   uuid.UUID `db:"chat_id" json:"chat_id"`
-	BeforeID int64     `db:"before_id" json:"before_id"`
-	LimitVal int32     `db:"limit_val" json:"limit_val"`
-}
-
-type GetChatMessagePageEventsAndVisibleBoundariesRow struct {
-	ID                       int64           `db:"id" json:"id"`
-	ChatID                   uuid.UUID       `db:"chat_id" json:"chat_id"`
-	Kind                     string          `db:"kind" json:"kind"`
-	MessageID                sql.NullInt64   `db:"message_id" json:"message_id"`
-	BoundaryKind             sql.NullString  `db:"boundary_kind" json:"boundary_kind"`
-	BoundarySource           sql.NullString  `db:"boundary_source" json:"boundary_source"`
-	BoundaryScope            string          `db:"boundary_scope" json:"boundary_scope"`
-	BoundaryAfterEventID     sql.NullInt64   `db:"boundary_after_event_id" json:"boundary_after_event_id"`
-	BoundarySummaryMessageID sql.NullInt64   `db:"boundary_summary_message_id" json:"boundary_summary_message_id"`
-	Visible                  bool            `db:"visible" json:"visible"`
-	CreatedBy                uuid.NullUUID   `db:"created_by" json:"created_by"`
-	CreatedAt                time.Time       `db:"created_at" json:"created_at"`
-	Metadata                 json.RawMessage `db:"metadata" json:"metadata"`
-}
-
-func (q *sqlQuerier) GetChatMessagePageEventsAndVisibleBoundaries(ctx context.Context, arg GetChatMessagePageEventsAndVisibleBoundariesParams) ([]GetChatMessagePageEventsAndVisibleBoundariesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getChatMessagePageEventsAndVisibleBoundaries, arg.ChatID, arg.BeforeID, arg.LimitVal)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetChatMessagePageEventsAndVisibleBoundariesRow
-	for rows.Next() {
-		var i GetChatMessagePageEventsAndVisibleBoundariesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ChatID,
-			&i.Kind,
-			&i.MessageID,
-			&i.BoundaryKind,
-			&i.BoundarySource,
-			&i.BoundaryScope,
-			&i.BoundaryAfterEventID,
-			&i.BoundarySummaryMessageID,
-			&i.Visible,
-			&i.CreatedBy,
-			&i.CreatedAt,
-			&i.Metadata,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getChatMessageSummariesPerChat = `-- name: GetChatMessageSummariesPerChat :many
 SELECT
     cm.chat_id,
@@ -6780,59 +6605,44 @@ func (q *sqlQuerier) GetChatMessagesByChatIDDescPaginated(ctx context.Context, a
 const getChatMessagesForPromptByChatID = `-- name: GetChatMessagesForPromptByChatID :many
 WITH latest_boundary AS (
     SELECT
-        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
+        id, chat_id, kind, after_message_id, summary_message_id, visible, created_by, created_at, metadata
     FROM
-        chat_events
+        chat_context_boundaries
     WHERE
         chat_id = $1::uuid
-        AND kind = 'context_boundary'
-        AND boundary_scope = 'chat'
     ORDER BY
         id DESC
     LIMIT
         1
-), prompt_message_ids AS (
-    SELECT
-        chat_events.id AS sort_event_id,
-        chat_messages.id AS message_id
-    FROM
-        chat_events
-    JOIN
-        chat_messages ON chat_messages.id = chat_events.message_id
-            AND chat_messages.chat_id = chat_events.chat_id
-    LEFT JOIN
-        latest_boundary ON true
-    WHERE
-        chat_events.chat_id = $1::uuid
-        AND chat_events.kind = 'message_created'
-        AND chat_messages.visibility IN ('model', 'both')
-        AND chat_messages.deleted = false
-        AND chat_messages.compressed = false
-        AND (
-            chat_messages.role = 'system'
-            OR latest_boundary.id IS NULL
-            OR chat_events.id > latest_boundary.id
-        )
-    UNION ALL
-    SELECT
-        latest_boundary.id AS sort_event_id,
-        summary_messages.id AS message_id
-    FROM
-        latest_boundary
-    JOIN
-        chat_messages AS summary_messages ON summary_messages.id = latest_boundary.boundary_summary_message_id
-            AND summary_messages.chat_id = latest_boundary.chat_id
-    WHERE
-        summary_messages.deleted = false
 )
 SELECT
     chat_messages.id, chat_messages.chat_id, chat_messages.model_config_id, chat_messages.created_at, chat_messages.role, chat_messages.content, chat_messages.visibility, chat_messages.input_tokens, chat_messages.output_tokens, chat_messages.total_tokens, chat_messages.reasoning_tokens, chat_messages.cache_creation_tokens, chat_messages.cache_read_tokens, chat_messages.context_limit, chat_messages.compressed, chat_messages.created_by, chat_messages.content_version, chat_messages.total_cost_micros, chat_messages.runtime_ms, chat_messages.deleted, chat_messages.provider_response_id
 FROM
-    prompt_message_ids
-JOIN
-    chat_messages ON chat_messages.id = prompt_message_ids.message_id
+    chat_messages
+LEFT JOIN
+    latest_boundary ON true
+WHERE
+    chat_messages.chat_id = $1::uuid
+    AND chat_messages.visibility IN ('model', 'both')
+    AND chat_messages.deleted = false
+    AND (
+        (
+            chat_messages.role = 'system'
+            AND chat_messages.compressed = false
+        )
+        OR (
+            latest_boundary.summary_message_id IS NOT NULL
+            AND chat_messages.id = latest_boundary.summary_message_id
+        )
+        OR (
+            chat_messages.compressed = false
+            AND (
+                latest_boundary.id IS NULL
+                OR chat_messages.id > COALESCE(latest_boundary.after_message_id, 0)
+            )
+        )
+    )
 ORDER BY
-    prompt_message_ids.sort_event_id ASC,
     chat_messages.id ASC
 `
 
@@ -6948,67 +6758,6 @@ func (q *sqlQuerier) GetChatQueuedMessages(ctx context.Context, chatID uuid.UUID
 			&i.Content,
 			&i.CreatedAt,
 			&i.ModelConfigID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getChatTimelineEventsByChatIDDescPaginated = `-- name: GetChatTimelineEventsByChatIDDescPaginated :many
-SELECT
-    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
-FROM
-    chat_events
-WHERE
-    chat_id = $1::uuid
-    AND visible = true
-    AND CASE
-        WHEN $2::bigint > 0 THEN id < $2::bigint
-        ELSE true
-    END
-ORDER BY
-    id DESC
-LIMIT
-    COALESCE(NULLIF($3::int, 0), 50)
-`
-
-type GetChatTimelineEventsByChatIDDescPaginatedParams struct {
-	ChatID   uuid.UUID `db:"chat_id" json:"chat_id"`
-	BeforeID int64     `db:"before_id" json:"before_id"`
-	LimitVal int32     `db:"limit_val" json:"limit_val"`
-}
-
-func (q *sqlQuerier) GetChatTimelineEventsByChatIDDescPaginated(ctx context.Context, arg GetChatTimelineEventsByChatIDDescPaginatedParams) ([]ChatEvent, error) {
-	rows, err := q.db.QueryContext(ctx, getChatTimelineEventsByChatIDDescPaginated, arg.ChatID, arg.BeforeID, arg.LimitVal)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ChatEvent
-	for rows.Next() {
-		var i ChatEvent
-		if err := rows.Scan(
-			&i.ID,
-			&i.ChatID,
-			&i.Kind,
-			&i.MessageID,
-			&i.BoundaryKind,
-			&i.BoundarySource,
-			&i.BoundaryScope,
-			&i.BoundaryAfterEventID,
-			&i.BoundarySummaryMessageID,
-			&i.Visible,
-			&i.CreatedBy,
-			&i.CreatedAt,
-			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -7481,34 +7230,28 @@ func (q *sqlQuerier) GetLastChatMessageByRole(ctx context.Context, arg GetLastCh
 	return i, err
 }
 
-const getLatestChatContextBoundaryEventByChatID = `-- name: GetLatestChatContextBoundaryEventByChatID :one
+const getLatestChatContextBoundaryByChatID = `-- name: GetLatestChatContextBoundaryByChatID :one
 SELECT
-    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
+    id, chat_id, kind, after_message_id, summary_message_id, visible, created_by, created_at, metadata
 FROM
-    chat_events
+    chat_context_boundaries
 WHERE
     chat_id = $1::uuid
-    AND kind = 'context_boundary'
-    AND boundary_scope = 'chat'
 ORDER BY
     id DESC
 LIMIT
     1
 `
 
-func (q *sqlQuerier) GetLatestChatContextBoundaryEventByChatID(ctx context.Context, chatID uuid.UUID) (ChatEvent, error) {
-	row := q.db.QueryRowContext(ctx, getLatestChatContextBoundaryEventByChatID, chatID)
-	var i ChatEvent
+func (q *sqlQuerier) GetLatestChatContextBoundaryByChatID(ctx context.Context, chatID uuid.UUID) (ChatContextBoundary, error) {
+	row := q.db.QueryRowContext(ctx, getLatestChatContextBoundaryByChatID, chatID)
+	var i ChatContextBoundary
 	err := row.Scan(
 		&i.ID,
 		&i.ChatID,
 		&i.Kind,
-		&i.MessageID,
-		&i.BoundaryKind,
-		&i.BoundarySource,
-		&i.BoundaryScope,
-		&i.BoundaryAfterEventID,
-		&i.BoundarySummaryMessageID,
+		&i.AfterMessageID,
+		&i.SummaryMessageID,
 		&i.Visible,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -7517,17 +7260,17 @@ func (q *sqlQuerier) GetLatestChatContextBoundaryEventByChatID(ctx context.Conte
 	return i, err
 }
 
-const getMaxChatEventIDByChatID = `-- name: GetMaxChatEventIDByChatID :one
+const getMaxChatMessageIDByChatID = `-- name: GetMaxChatMessageIDByChatID :one
 SELECT
     COALESCE(MAX(id), 0)::bigint
 FROM
-    chat_events
+    chat_messages
 WHERE
     chat_id = $1::uuid
 `
 
-func (q *sqlQuerier) GetMaxChatEventIDByChatID(ctx context.Context, chatID uuid.UUID) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getMaxChatEventIDByChatID, chatID)
+func (q *sqlQuerier) GetMaxChatMessageIDByChatID(ctx context.Context, chatID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getMaxChatMessageIDByChatID, chatID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -7662,6 +7405,60 @@ func (q *sqlQuerier) GetUserGroupSpendLimit(ctx context.Context, arg GetUserGrou
 	return limit_micros, err
 }
 
+const getVisibleChatContextBoundariesByChatIDPaginated = `-- name: GetVisibleChatContextBoundariesByChatIDPaginated :many
+SELECT
+    id, chat_id, kind, after_message_id, summary_message_id, visible, created_by, created_at, metadata
+FROM
+    chat_context_boundaries
+WHERE
+    chat_id = $1::uuid
+    AND visible = true
+    AND CASE
+        WHEN $2::bigint > 0 THEN id < $2::bigint
+        ELSE true
+    END
+ORDER BY
+    id ASC
+`
+
+type GetVisibleChatContextBoundariesByChatIDPaginatedParams struct {
+	ChatID   uuid.UUID `db:"chat_id" json:"chat_id"`
+	BeforeID int64     `db:"before_id" json:"before_id"`
+}
+
+func (q *sqlQuerier) GetVisibleChatContextBoundariesByChatIDPaginated(ctx context.Context, arg GetVisibleChatContextBoundariesByChatIDPaginatedParams) ([]ChatContextBoundary, error) {
+	rows, err := q.db.QueryContext(ctx, getVisibleChatContextBoundariesByChatIDPaginated, arg.ChatID, arg.BeforeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatContextBoundary
+	for rows.Next() {
+		var i ChatContextBoundary
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Kind,
+			&i.AfterMessageID,
+			&i.SummaryMessageID,
+			&i.Visible,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertChat = `-- name: InsertChat :one
 INSERT INTO chats (
     organization_id,
@@ -7773,73 +7570,59 @@ func (q *sqlQuerier) InsertChat(ctx context.Context, arg InsertChatParams) (Chat
 	return i, err
 }
 
-const insertChatContextBoundaryEvent = `-- name: InsertChatContextBoundaryEvent :one
-INSERT INTO chat_events (
+const insertChatContextBoundary = `-- name: InsertChatContextBoundary :one
+INSERT INTO chat_context_boundaries (
     chat_id,
     kind,
-    boundary_kind,
-    boundary_source,
-    boundary_scope,
-    boundary_after_event_id,
-    boundary_summary_message_id,
+    after_message_id,
+    summary_message_id,
     visible,
     created_by,
     created_at,
     metadata
 ) VALUES (
     $1::uuid,
-    'context_boundary',
     $2::text,
-    $3::text,
-    $4::text,
-    $5::bigint,
-    $6::bigint,
-    $7::boolean,
-    $8::uuid,
-    COALESCE($9::timestamptz, now()),
-    COALESCE($10::jsonb, '{}'::jsonb)
+    $3::bigint,
+    $4::bigint,
+    $5::boolean,
+    $6::uuid,
+    COALESCE($7::timestamptz, now()),
+    COALESCE($8::jsonb, '{}'::jsonb)
 )
 RETURNING
-    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
+    id, chat_id, kind, after_message_id, summary_message_id, visible, created_by, created_at, metadata
 `
 
-type InsertChatContextBoundaryEventParams struct {
-	ChatID                   uuid.UUID             `db:"chat_id" json:"chat_id"`
-	BoundaryKind             string                `db:"boundary_kind" json:"boundary_kind"`
-	BoundarySource           string                `db:"boundary_source" json:"boundary_source"`
-	BoundaryScope            string                `db:"boundary_scope" json:"boundary_scope"`
-	BoundaryAfterEventID     sql.NullInt64         `db:"boundary_after_event_id" json:"boundary_after_event_id"`
-	BoundarySummaryMessageID sql.NullInt64         `db:"boundary_summary_message_id" json:"boundary_summary_message_id"`
-	Visible                  bool                  `db:"visible" json:"visible"`
-	CreatedBy                uuid.NullUUID         `db:"created_by" json:"created_by"`
-	CreatedAt                sql.NullTime          `db:"created_at" json:"created_at"`
-	Metadata                 pqtype.NullRawMessage `db:"metadata" json:"metadata"`
+type InsertChatContextBoundaryParams struct {
+	ChatID           uuid.UUID             `db:"chat_id" json:"chat_id"`
+	Kind             string                `db:"kind" json:"kind"`
+	AfterMessageID   sql.NullInt64         `db:"after_message_id" json:"after_message_id"`
+	SummaryMessageID sql.NullInt64         `db:"summary_message_id" json:"summary_message_id"`
+	Visible          bool                  `db:"visible" json:"visible"`
+	CreatedBy        uuid.NullUUID         `db:"created_by" json:"created_by"`
+	CreatedAt        sql.NullTime          `db:"created_at" json:"created_at"`
+	Metadata         pqtype.NullRawMessage `db:"metadata" json:"metadata"`
 }
 
-func (q *sqlQuerier) InsertChatContextBoundaryEvent(ctx context.Context, arg InsertChatContextBoundaryEventParams) (ChatEvent, error) {
-	row := q.db.QueryRowContext(ctx, insertChatContextBoundaryEvent,
+func (q *sqlQuerier) InsertChatContextBoundary(ctx context.Context, arg InsertChatContextBoundaryParams) (ChatContextBoundary, error) {
+	row := q.db.QueryRowContext(ctx, insertChatContextBoundary,
 		arg.ChatID,
-		arg.BoundaryKind,
-		arg.BoundarySource,
-		arg.BoundaryScope,
-		arg.BoundaryAfterEventID,
-		arg.BoundarySummaryMessageID,
+		arg.Kind,
+		arg.AfterMessageID,
+		arg.SummaryMessageID,
 		arg.Visible,
 		arg.CreatedBy,
 		arg.CreatedAt,
 		arg.Metadata,
 	)
-	var i ChatEvent
+	var i ChatContextBoundary
 	err := row.Scan(
 		&i.ID,
 		&i.ChatID,
 		&i.Kind,
-		&i.MessageID,
-		&i.BoundaryKind,
-		&i.BoundarySource,
-		&i.BoundaryScope,
-		&i.BoundaryAfterEventID,
-		&i.BoundarySummaryMessageID,
+		&i.AfterMessageID,
+		&i.SummaryMessageID,
 		&i.Visible,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -7918,28 +7701,6 @@ WITH updated_chat AS (
         NULLIF(UNNEST($18::text[]), '')
     RETURNING
         id, chat_id, model_config_id, created_at, role, content, visibility, input_tokens, output_tokens, total_tokens, reasoning_tokens, cache_creation_tokens, cache_read_tokens, context_limit, compressed, created_by, content_version, total_cost_micros, runtime_ms, deleted, provider_response_id
-), inserted_events AS (
-    INSERT INTO chat_events (
-        chat_id,
-        kind,
-        message_id,
-        visible,
-        created_by,
-        created_at
-    )
-    SELECT
-        inserted_messages.chat_id,
-        'message_created',
-        inserted_messages.id,
-        inserted_messages.visibility IN ('user', 'both'),
-        inserted_messages.created_by,
-        inserted_messages.created_at
-    FROM
-        inserted_messages
-    ORDER BY
-        inserted_messages.id ASC
-    RETURNING
-        id
 ), chat_messages AS (
     -- This CTE intentionally shadows the table name so sqlc keeps returning
     -- ChatMessage while PostgreSQL reads the rows from inserted_messages.
@@ -7947,12 +7708,6 @@ WITH updated_chat AS (
         inserted_messages.id, inserted_messages.chat_id, inserted_messages.model_config_id, inserted_messages.created_at, inserted_messages.role, inserted_messages.content, inserted_messages.visibility, inserted_messages.input_tokens, inserted_messages.output_tokens, inserted_messages.total_tokens, inserted_messages.reasoning_tokens, inserted_messages.cache_creation_tokens, inserted_messages.cache_read_tokens, inserted_messages.context_limit, inserted_messages.compressed, inserted_messages.created_by, inserted_messages.content_version, inserted_messages.total_cost_micros, inserted_messages.runtime_ms, inserted_messages.deleted, inserted_messages.provider_response_id
     FROM
         inserted_messages
-    CROSS JOIN (
-        SELECT
-            COUNT(*)
-        FROM
-            inserted_events
-    ) AS inserted_events_count
 )
 SELECT
     chat_messages.id, chat_messages.chat_id, chat_messages.model_config_id, chat_messages.created_at, chat_messages.role, chat_messages.content, chat_messages.visibility, chat_messages.input_tokens, chat_messages.output_tokens, chat_messages.total_tokens, chat_messages.reasoning_tokens, chat_messages.cache_creation_tokens, chat_messages.cache_read_tokens, chat_messages.context_limit, chat_messages.compressed, chat_messages.created_by, chat_messages.content_version, chat_messages.total_cost_micros, chat_messages.runtime_ms, chat_messages.deleted, chat_messages.provider_response_id

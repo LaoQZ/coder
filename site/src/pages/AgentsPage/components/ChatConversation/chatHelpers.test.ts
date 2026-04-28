@@ -13,7 +13,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Minimal ChatMessage factory – only required fields. */
+/** Minimal ChatMessage factory, only required fields. */
 const makeMessage = (
 	overrides: Partial<TypesGen.ChatMessage> = {},
 ): TypesGen.ChatMessage =>
@@ -25,40 +25,29 @@ const makeMessage = (
 		...overrides,
 	}) as TypesGen.ChatMessage;
 
-const makeMessageEvent = (
-	message: TypesGen.ChatMessage,
-): TypesGen.ChatEvent => ({
-	id: message.id * 2,
-	chat_id: message.chat_id,
-	type: "message_created",
-	message,
-	created_at: message.created_at,
-});
-
-const makeClearBoundaryEvent = (afterEventID?: number): TypesGen.ChatEvent => ({
-	id: 5,
-	chat_id: "chat-1",
-	type: "context_boundary",
-	context_boundary: {
+const makeClearBoundary = (
+	afterMessageID?: number,
+	overrides: Partial<TypesGen.ChatContextBoundary> = {},
+): TypesGen.ChatContextBoundary =>
+	({
+		id: 5,
+		chat_id: "chat-1",
 		kind: "clear",
-		source: "user",
-		scope: "chat",
-		...(afterEventID === undefined ? {} : { after_event_id: afterEventID }),
+		...(afterMessageID === undefined
+			? {}
+			: { after_message_id: afterMessageID }),
 		visible: true,
+		created_at: "2025-01-01T00:01:00Z",
 		metadata: {},
-	},
-	created_at: "2025-01-01T00:01:00Z",
-});
+		...overrides,
+	}) as TypesGen.ChatContextBoundary;
 
-const makeEvents = (
-	messages: readonly TypesGen.ChatMessage[],
-	clearAfterEventID?: number,
-): TypesGen.ChatEvent[] => [
-	...messages.map(makeMessageEvent),
-	...(clearAfterEventID === undefined
+const makeBoundaries = (
+	clearAfterMessageID?: number,
+): TypesGen.ChatContextBoundary[] =>
+	clearAfterMessageID === undefined
 		? []
-		: [makeClearBoundaryEvent(clearAfterEventID)]),
-];
+		: [makeClearBoundary(clearAfterMessageID)];
 
 const makeOption = (
 	id: string,
@@ -143,7 +132,7 @@ describe("getLatestContextUsage", () => {
 
 	it("returns null when no messages have usage data", () => {
 		const messages = [makeMessage(), makeMessage({ id: 2 })];
-		expect(getLatestContextUsage(messages, makeEvents(messages))).toBeNull();
+		expect(getLatestContextUsage(messages, makeBoundaries())).toBeNull();
 	});
 
 	it("returns usage from the last message with usage data", () => {
@@ -152,7 +141,7 @@ describe("getLatestContextUsage", () => {
 			makeMessage({ id: 2 }),
 			makeMessage({ id: 3, usage: { input_tokens: 300 } }),
 		];
-		const result = getLatestContextUsage(messages, makeEvents(messages));
+		const result = getLatestContextUsage(messages, makeBoundaries());
 		expect(result).not.toBeNull();
 		expect(result!.inputTokens).toBe(300);
 	});
@@ -163,7 +152,7 @@ describe("getLatestContextUsage", () => {
 			makeMessage({ id: 2, usage: { input_tokens: 200 } }),
 			makeMessage({ id: 3 }),
 		];
-		const result = getLatestContextUsage(messages, makeEvents(messages));
+		const result = getLatestContextUsage(messages, makeBoundaries());
 		expect(result).not.toBeNull();
 		expect(result!.inputTokens).toBe(200);
 	});
@@ -173,7 +162,7 @@ describe("getLatestContextUsage", () => {
 			makeMessage({ id: 1, usage: { input_tokens: 50 } }),
 			makeMessage({ id: 3 }),
 		];
-		const result = getLatestContextUsage(messages, makeEvents(messages, 2));
+		const result = getLatestContextUsage(messages, makeBoundaries(2));
 		expect(result).toBeNull();
 	});
 
@@ -182,7 +171,7 @@ describe("getLatestContextUsage", () => {
 			makeMessage({ id: 1, usage: { input_tokens: 50 } }),
 			makeMessage({ id: 3, usage: { input_tokens: 300 } }),
 		];
-		const result = getLatestContextUsage(messages, makeEvents(messages, 2));
+		const result = getLatestContextUsage(messages, makeBoundaries(2));
 		expect(result).not.toBeNull();
 		expect(result!.inputTokens).toBe(300);
 	});

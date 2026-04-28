@@ -1748,34 +1748,23 @@ func (api *API) getChatMessages(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	messageMap := make(map[int64]database.ChatMessage, len(messages))
-	for _, message := range messages {
-		messageMap[message.ID] = message
-	}
-
-	var pageEvents []database.GetChatMessagePageEventsAndVisibleBoundariesRow
-	if len(messages) > 0 {
-		pageEvents, err = api.Database.GetChatMessagePageEventsAndVisibleBoundaries(ctx, database.GetChatMessagePageEventsAndVisibleBoundariesParams{
-			ChatID:   chatID,
-			BeforeID: beforeID,
-			LimitVal: limit,
+	boundaries, err := api.Database.GetVisibleChatContextBoundariesByChatIDPaginated(ctx, database.GetVisibleChatContextBoundariesByChatIDPaginatedParams{
+		ChatID:   chatID,
+		BeforeID: 0,
+	})
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Failed to get chat context boundaries.",
+			Detail:  err.Error(),
 		})
-		if err != nil {
-			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
-				Message: "Failed to get chat timeline events.",
-				Detail:  err.Error(),
-			})
-			return
-		}
+		return
 	}
-
-	events := db2sdk.ChatEventsFromMessagePageEvents(pageEvents, messageMap)
 
 	httpapi.Write(ctx, rw, http.StatusOK, codersdk.ChatMessagesResponse{
-		Messages:       convertChatMessages(messages),
-		QueuedMessages: convertChatQueuedMessages(queuedMessages),
-		Events:         events,
-		HasMore:        hasMore,
+		Messages:          convertChatMessages(messages),
+		QueuedMessages:    convertChatQueuedMessages(queuedMessages),
+		ContextBoundaries: db2sdk.ChatContextBoundaries(boundaries),
+		HasMore:           hasMore,
 	})
 }
 

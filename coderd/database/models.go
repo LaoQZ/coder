@@ -4370,6 +4370,18 @@ type Chat struct {
 	ClientType          ChatClientType        `db:"client_type" json:"client_type"`
 }
 
+type ChatContextBoundary struct {
+	ID               int64           `db:"id" json:"id"`
+	ChatID           uuid.UUID       `db:"chat_id" json:"chat_id"`
+	Kind             string          `db:"kind" json:"kind"`
+	AfterMessageID   sql.NullInt64   `db:"after_message_id" json:"after_message_id"`
+	SummaryMessageID sql.NullInt64   `db:"summary_message_id" json:"summary_message_id"`
+	Visible          bool            `db:"visible" json:"visible"`
+	CreatedBy        uuid.NullUUID   `db:"created_by" json:"created_by"`
+	CreatedAt        time.Time       `db:"created_at" json:"created_at"`
+	Metadata         json.RawMessage `db:"metadata" json:"metadata"`
+}
+
 type ChatDebugRun struct {
 	ID                  uuid.UUID       `db:"id" json:"id"`
 	ChatID              uuid.UUID       `db:"chat_id" json:"chat_id"`
@@ -4432,22 +4444,6 @@ type ChatDiffStatus struct {
 	Approved         sql.NullBool   `db:"approved" json:"approved"`
 	ReviewerCount    sql.NullInt32  `db:"reviewer_count" json:"reviewer_count"`
 	HeadBranch       sql.NullString `db:"head_branch" json:"head_branch"`
-}
-
-type ChatEvent struct {
-	ID                       int64           `db:"id" json:"id"`
-	ChatID                   uuid.UUID       `db:"chat_id" json:"chat_id"`
-	Kind                     string          `db:"kind" json:"kind"`
-	MessageID                sql.NullInt64   `db:"message_id" json:"message_id"`
-	BoundaryKind             sql.NullString  `db:"boundary_kind" json:"boundary_kind"`
-	BoundarySource           sql.NullString  `db:"boundary_source" json:"boundary_source"`
-	BoundaryScope            string          `db:"boundary_scope" json:"boundary_scope"`
-	BoundaryAfterEventID     sql.NullInt64   `db:"boundary_after_event_id" json:"boundary_after_event_id"`
-	BoundarySummaryMessageID sql.NullInt64   `db:"boundary_summary_message_id" json:"boundary_summary_message_id"`
-	Visible                  bool            `db:"visible" json:"visible"`
-	CreatedBy                uuid.NullUUID   `db:"created_by" json:"created_by"`
-	CreatedAt                time.Time       `db:"created_at" json:"created_at"`
-	Metadata                 json.RawMessage `db:"metadata" json:"metadata"`
 }
 
 type ChatFile struct {

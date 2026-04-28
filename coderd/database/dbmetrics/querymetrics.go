@@ -1296,22 +1296,6 @@ func (m queryMetricsStore) GetChatMessageByID(ctx context.Context, id int64) (da
 	return r0, r1
 }
 
-func (m queryMetricsStore) GetChatMessageCreatedEventByChatIDAndMessageID(ctx context.Context, arg database.GetChatMessageCreatedEventByChatIDAndMessageIDParams) (database.ChatEvent, error) {
-	start := time.Now()
-	r0, r1 := m.s.GetChatMessageCreatedEventByChatIDAndMessageID(ctx, arg)
-	m.queryLatencies.WithLabelValues("GetChatMessageCreatedEventByChatIDAndMessageID").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatMessageCreatedEventByChatIDAndMessageID").Inc()
-	return r0, r1
-}
-
-func (m queryMetricsStore) GetChatMessagePageEventsAndVisibleBoundaries(ctx context.Context, arg database.GetChatMessagePageEventsAndVisibleBoundariesParams) ([]database.GetChatMessagePageEventsAndVisibleBoundariesRow, error) {
-	start := time.Now()
-	r0, r1 := m.s.GetChatMessagePageEventsAndVisibleBoundaries(ctx, arg)
-	m.queryLatencies.WithLabelValues("GetChatMessagePageEventsAndVisibleBoundaries").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatMessagePageEventsAndVisibleBoundaries").Inc()
-	return r0, r1
-}
-
 func (m queryMetricsStore) GetChatMessageSummariesPerChat(ctx context.Context, createdAfter time.Time) ([]database.GetChatMessageSummariesPerChatRow, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetChatMessageSummariesPerChat(ctx, createdAfter)
@@ -1461,14 +1445,6 @@ func (m queryMetricsStore) GetChatTemplateAllowlist(ctx context.Context) (string
 	r0, r1 := m.s.GetChatTemplateAllowlist(ctx)
 	m.queryLatencies.WithLabelValues("GetChatTemplateAllowlist").Observe(time.Since(start).Seconds())
 	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatTemplateAllowlist").Inc()
-	return r0, r1
-}
-
-func (m queryMetricsStore) GetChatTimelineEventsByChatIDDescPaginated(ctx context.Context, arg database.GetChatTimelineEventsByChatIDDescPaginatedParams) ([]database.ChatEvent, error) {
-	start := time.Now()
-	r0, r1 := m.s.GetChatTimelineEventsByChatIDDescPaginated(ctx, arg)
-	m.queryLatencies.WithLabelValues("GetChatTimelineEventsByChatIDDescPaginated").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatTimelineEventsByChatIDDescPaginated").Inc()
 	return r0, r1
 }
 
@@ -1848,11 +1824,11 @@ func (m queryMetricsStore) GetLastUpdateCheck(ctx context.Context) (string, erro
 	return r0, r1
 }
 
-func (m queryMetricsStore) GetLatestChatContextBoundaryEventByChatID(ctx context.Context, chatID uuid.UUID) (database.ChatEvent, error) {
+func (m queryMetricsStore) GetLatestChatContextBoundaryByChatID(ctx context.Context, chatID uuid.UUID) (database.ChatContextBoundary, error) {
 	start := time.Now()
-	r0, r1 := m.s.GetLatestChatContextBoundaryEventByChatID(ctx, chatID)
-	m.queryLatencies.WithLabelValues("GetLatestChatContextBoundaryEventByChatID").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetLatestChatContextBoundaryEventByChatID").Inc()
+	r0, r1 := m.s.GetLatestChatContextBoundaryByChatID(ctx, chatID)
+	m.queryLatencies.WithLabelValues("GetLatestChatContextBoundaryByChatID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetLatestChatContextBoundaryByChatID").Inc()
 	return r0, r1
 }
 
@@ -1976,11 +1952,11 @@ func (m queryMetricsStore) GetMCPServerUserTokensByUserID(ctx context.Context, u
 	return r0, r1
 }
 
-func (m queryMetricsStore) GetMaxChatEventIDByChatID(ctx context.Context, chatID uuid.UUID) (int64, error) {
+func (m queryMetricsStore) GetMaxChatMessageIDByChatID(ctx context.Context, chatID uuid.UUID) (int64, error) {
 	start := time.Now()
-	r0, r1 := m.s.GetMaxChatEventIDByChatID(ctx, chatID)
-	m.queryLatencies.WithLabelValues("GetMaxChatEventIDByChatID").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetMaxChatEventIDByChatID").Inc()
+	r0, r1 := m.s.GetMaxChatMessageIDByChatID(ctx, chatID)
+	m.queryLatencies.WithLabelValues("GetMaxChatMessageIDByChatID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetMaxChatMessageIDByChatID").Inc()
 	return r0, r1
 }
 
@@ -2960,6 +2936,14 @@ func (m queryMetricsStore) GetUsersByIDs(ctx context.Context, ids []uuid.UUID) (
 	return r0, r1
 }
 
+func (m queryMetricsStore) GetVisibleChatContextBoundariesByChatIDPaginated(ctx context.Context, arg database.GetVisibleChatContextBoundariesByChatIDPaginatedParams) ([]database.ChatContextBoundary, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetVisibleChatContextBoundariesByChatIDPaginated(ctx, arg)
+	m.queryLatencies.WithLabelValues("GetVisibleChatContextBoundariesByChatIDPaginated").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetVisibleChatContextBoundariesByChatIDPaginated").Inc()
+	return r0, r1
+}
+
 func (m queryMetricsStore) GetWebpushSubscriptionsByUserID(ctx context.Context, userID uuid.UUID) ([]database.WebpushSubscription, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetWebpushSubscriptionsByUserID(ctx, userID)
@@ -3520,11 +3504,11 @@ func (m queryMetricsStore) InsertChat(ctx context.Context, arg database.InsertCh
 	return r0, r1
 }
 
-func (m queryMetricsStore) InsertChatContextBoundaryEvent(ctx context.Context, arg database.InsertChatContextBoundaryEventParams) (database.ChatEvent, error) {
+func (m queryMetricsStore) InsertChatContextBoundary(ctx context.Context, arg database.InsertChatContextBoundaryParams) (database.ChatContextBoundary, error) {
 	start := time.Now()
-	r0, r1 := m.s.InsertChatContextBoundaryEvent(ctx, arg)
-	m.queryLatencies.WithLabelValues("InsertChatContextBoundaryEvent").Observe(time.Since(start).Seconds())
-	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "InsertChatContextBoundaryEvent").Inc()
+	r0, r1 := m.s.InsertChatContextBoundary(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertChatContextBoundary").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "InsertChatContextBoundary").Inc()
 	return r0, r1
 }
 

@@ -42,88 +42,59 @@ export const extractContextUsageFromMessage = (
 	};
 };
 
-type VisibleClearBoundaryEvent = TypesGen.ChatEvent & {
-	readonly context_boundary: TypesGen.ChatContextBoundary;
+type VisibleClearBoundary = TypesGen.ChatContextBoundary & {
+	readonly kind: "clear";
+	readonly visible: true;
 };
 
-const getVisibleClearBoundaryEvents = (
-	events: readonly TypesGen.ChatEvent[] = [],
-): VisibleClearBoundaryEvent[] =>
-	events.filter((event): event is VisibleClearBoundaryEvent => {
-		const boundary = event.context_boundary;
-		return (
-			event.type === "context_boundary" &&
-			boundary?.kind === "clear" &&
-			boundary.visible === true
-		);
-	});
-
-export const buildMessageCreatedEventIDByMessageID = (
-	events: readonly TypesGen.ChatEvent[] = [],
-): Map<number, number> => {
-	const eventIDByMessageID = new Map<number, number>();
-	for (const event of events) {
-		const messageID = event.message?.id;
-		if (event.type === "message_created" && messageID !== undefined) {
-			eventIDByMessageID.set(messageID, event.id);
-		}
-	}
-	return eventIDByMessageID;
-};
+const getVisibleClearBoundaries = (
+	contextBoundaries: readonly TypesGen.ChatContextBoundary[] = [],
+): VisibleClearBoundary[] =>
+	contextBoundaries.filter(
+		(boundary): boundary is VisibleClearBoundary =>
+			boundary.kind === "clear" && boundary.visible === true,
+	);
 
 const compareClearBoundaries = (
-	a: VisibleClearBoundaryEvent,
-	b: VisibleClearBoundaryEvent,
+	a: VisibleClearBoundary,
+	b: VisibleClearBoundary,
 ): number => {
-	const aAfter = a.context_boundary.after_event_id;
-	const bAfter = b.context_boundary.after_event_id;
-	if (aAfter === undefined && bAfter !== undefined) {
+	const aAfter = a.after_message_id;
+	const bAfter = b.after_message_id;
+	if (aAfter == null && bAfter != null) {
 		return -1;
 	}
-	if (aAfter !== undefined && bAfter === undefined) {
+	if (aAfter != null && bAfter == null) {
 		return 1;
 	}
-	if (aAfter !== undefined && bAfter !== undefined && aAfter !== bAfter) {
+	if (aAfter != null && bAfter != null && aAfter !== bAfter) {
 		return aAfter - bAfter;
 	}
 	return a.id - b.id;
 };
 
-export const getSortedVisibleClearBoundaryEvents = (
-	events: readonly TypesGen.ChatEvent[] = [],
-): VisibleClearBoundaryEvent[] =>
-	getVisibleClearBoundaryEvents(events).sort(compareClearBoundaries);
+export const getSortedVisibleClearBoundaries = (
+	contextBoundaries: readonly TypesGen.ChatContextBoundary[] = [],
+): VisibleClearBoundary[] =>
+	getVisibleClearBoundaries(contextBoundaries).sort(compareClearBoundaries);
 
 export const getLatestContextUsage = (
 	messages: readonly TypesGen.ChatMessage[],
-	events: readonly TypesGen.ChatEvent[] = [],
+	contextBoundaries: readonly TypesGen.ChatContextBoundary[] = [],
 ): AgentContextUsage | null => {
-	const visibleClearBoundaries = getSortedVisibleClearBoundaryEvents(events);
-	const latestClearBoundary = visibleClearBoundaries.at(-1);
-	const latestClearAfterEventID =
-		latestClearBoundary?.context_boundary.after_event_id;
-	const messageCreatedEventIDByMessageID =
-		buildMessageCreatedEventIDByMessageID(events);
+	const visibleClearBoundaries =
+		getSortedVisibleClearBoundaries(contextBoundaries);
+	const latestClearAfterMessageID =
+		visibleClearBoundaries.at(-1)?.after_message_id;
 
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
 		const message = messages[index];
 		if (!message) {
 			continue;
 		}
-		const messageCreatedEventID = messageCreatedEventIDByMessageID.get(
-			message.id,
-		);
-		if (messageCreatedEventID === undefined) {
-			if (process.env.NODE_ENV !== "production") {
-				console.warn(
-					`[chatHelpers] missing message_created event for message ${message.id}.`,
-				);
-			}
-			continue;
-		}
 		if (
-			latestClearAfterEventID !== undefined &&
-			messageCreatedEventID <= latestClearAfterEventID
+			latestClearAfterMessageID != null &&
+			message.id <= latestClearAfterMessageID
 		) {
 			return null;
 		}

@@ -273,27 +273,21 @@ ORDER BY
 LIMIT
     COALESCE(NULLIF(@limit_val::int, 0), 50);
 
--- name: InsertChatContextBoundaryEvent :one
-INSERT INTO chat_events (
+-- name: InsertChatContextBoundary :one
+INSERT INTO chat_context_boundaries (
     chat_id,
     kind,
-    boundary_kind,
-    boundary_source,
-    boundary_scope,
-    boundary_after_event_id,
-    boundary_summary_message_id,
+    after_message_id,
+    summary_message_id,
     visible,
     created_by,
     created_at,
     metadata
 ) VALUES (
     @chat_id::uuid,
-    'context_boundary',
-    @boundary_kind::text,
-    @boundary_source::text,
-    @boundary_scope::text,
-    sqlc.narg('boundary_after_event_id')::bigint,
-    sqlc.narg('boundary_summary_message_id')::bigint,
+    @kind::text,
+    sqlc.narg('after_message_id')::bigint,
+    sqlc.narg('summary_message_id')::bigint,
     @visible::boolean,
     sqlc.narg('created_by')::uuid,
     COALESCE(sqlc.narg('created_at')::timestamptz, now()),
@@ -302,43 +296,31 @@ INSERT INTO chat_events (
 RETURNING
     *;
 
--- name: GetMaxChatEventIDByChatID :one
+-- name: GetMaxChatMessageIDByChatID :one
 SELECT
     COALESCE(MAX(id), 0)::bigint
 FROM
-    chat_events
+    chat_messages
 WHERE
     chat_id = @chat_id::uuid;
 
--- name: GetLatestChatContextBoundaryEventByChatID :one
+-- name: GetLatestChatContextBoundaryByChatID :one
 SELECT
     *
 FROM
-    chat_events
+    chat_context_boundaries
 WHERE
     chat_id = @chat_id::uuid
-    AND kind = 'context_boundary'
-    AND boundary_scope = 'chat'
 ORDER BY
     id DESC
 LIMIT
     1;
 
--- name: GetChatMessageCreatedEventByChatIDAndMessageID :one
+-- name: GetVisibleChatContextBoundariesByChatIDPaginated :many
 SELECT
     *
 FROM
-    chat_events
-WHERE
-    chat_id = @chat_id::uuid
-    AND message_id = @message_id::bigint
-    AND kind = 'message_created';
-
--- name: GetChatTimelineEventsByChatIDDescPaginated :many
-SELECT
-    *
-FROM
-    chat_events
+    chat_context_boundaries
 WHERE
     chat_id = @chat_id::uuid
     AND visible = true
@@ -347,86 +329,6 @@ WHERE
         ELSE true
     END
 ORDER BY
-    id DESC
-LIMIT
-    COALESCE(NULLIF(@limit_val::int, 0), 50);
-
--- name: GetChatMessagePageEventsAndVisibleBoundaries :many
-WITH page_messages AS (
-    SELECT
-        id
-    FROM
-        chat_messages
-    WHERE
-        chat_id = @chat_id::uuid
-        AND CASE
-            WHEN @before_id::bigint > 0 THEN id < @before_id::bigint
-            ELSE true
-        END
-        AND visibility IN ('user', 'both')
-        AND deleted = false
-    ORDER BY
-        id DESC
-    LIMIT
-        COALESCE(NULLIF(@limit_val::int, 0), 50)
-), page_message_events AS (
-    SELECT
-        chat_events.id,
-        chat_events.chat_id,
-        chat_events.kind,
-        chat_events.message_id,
-        chat_events.boundary_kind,
-        chat_events.boundary_source,
-        chat_events.boundary_scope,
-        chat_events.boundary_after_event_id,
-        chat_events.boundary_summary_message_id,
-        chat_events.visible,
-        chat_events.created_by,
-        chat_events.created_at,
-        chat_events.metadata
-    FROM
-        chat_events
-    JOIN
-        page_messages ON page_messages.id = chat_events.message_id
-    WHERE
-        chat_events.chat_id = @chat_id::uuid
-        AND chat_events.kind = 'message_created'
-), visible_boundaries AS (
-    SELECT
-        chat_events.id,
-        chat_events.chat_id,
-        chat_events.kind,
-        chat_events.message_id,
-        chat_events.boundary_kind,
-        chat_events.boundary_source,
-        chat_events.boundary_scope,
-        chat_events.boundary_after_event_id,
-        chat_events.boundary_summary_message_id,
-        chat_events.visible,
-        chat_events.created_by,
-        chat_events.created_at,
-        chat_events.metadata
-    FROM
-        chat_events
-    WHERE
-        chat_events.chat_id = @chat_id::uuid
-        AND chat_events.kind = 'context_boundary'
-        AND chat_events.visible = true
-)
-SELECT
-    *
-FROM (
-    SELECT
-        *
-    FROM
-        page_message_events
-    UNION ALL
-    SELECT
-        *
-    FROM
-        visible_boundaries
-) AS timeline_events
-ORDER BY
     id ASC;
 
 -- name: GetChatMessagesForPromptByChatID :many
@@ -434,57 +336,42 @@ WITH latest_boundary AS (
     SELECT
         *
     FROM
-        chat_events
+        chat_context_boundaries
     WHERE
         chat_id = @chat_id::uuid
-        AND kind = 'context_boundary'
-        AND boundary_scope = 'chat'
     ORDER BY
         id DESC
     LIMIT
         1
-), prompt_message_ids AS (
-    SELECT
-        chat_events.id AS sort_event_id,
-        chat_messages.id AS message_id
-    FROM
-        chat_events
-    JOIN
-        chat_messages ON chat_messages.id = chat_events.message_id
-            AND chat_messages.chat_id = chat_events.chat_id
-    LEFT JOIN
-        latest_boundary ON true
-    WHERE
-        chat_events.chat_id = @chat_id::uuid
-        AND chat_events.kind = 'message_created'
-        AND chat_messages.visibility IN ('model', 'both')
-        AND chat_messages.deleted = false
-        AND chat_messages.compressed = false
-        AND (
-            chat_messages.role = 'system'
-            OR latest_boundary.id IS NULL
-            OR chat_events.id > latest_boundary.id
-        )
-    UNION ALL
-    SELECT
-        latest_boundary.id AS sort_event_id,
-        summary_messages.id AS message_id
-    FROM
-        latest_boundary
-    JOIN
-        chat_messages AS summary_messages ON summary_messages.id = latest_boundary.boundary_summary_message_id
-            AND summary_messages.chat_id = latest_boundary.chat_id
-    WHERE
-        summary_messages.deleted = false
 )
 SELECT
     chat_messages.*
 FROM
-    prompt_message_ids
-JOIN
-    chat_messages ON chat_messages.id = prompt_message_ids.message_id
+    chat_messages
+LEFT JOIN
+    latest_boundary ON true
+WHERE
+    chat_messages.chat_id = @chat_id::uuid
+    AND chat_messages.visibility IN ('model', 'both')
+    AND chat_messages.deleted = false
+    AND (
+        (
+            chat_messages.role = 'system'
+            AND chat_messages.compressed = false
+        )
+        OR (
+            latest_boundary.summary_message_id IS NOT NULL
+            AND chat_messages.id = latest_boundary.summary_message_id
+        )
+        OR (
+            chat_messages.compressed = false
+            AND (
+                latest_boundary.id IS NULL
+                OR chat_messages.id > COALESCE(latest_boundary.after_message_id, 0)
+            )
+        )
+    )
 ORDER BY
-    prompt_message_ids.sort_event_id ASC,
     chat_messages.id ASC;
 
 -- name: GetChats :many
@@ -686,28 +573,6 @@ WITH updated_chat AS (
         NULLIF(UNNEST(@provider_response_id::text[]), '')
     RETURNING
         *
-), inserted_events AS (
-    INSERT INTO chat_events (
-        chat_id,
-        kind,
-        message_id,
-        visible,
-        created_by,
-        created_at
-    )
-    SELECT
-        inserted_messages.chat_id,
-        'message_created',
-        inserted_messages.id,
-        inserted_messages.visibility IN ('user', 'both'),
-        inserted_messages.created_by,
-        inserted_messages.created_at
-    FROM
-        inserted_messages
-    ORDER BY
-        inserted_messages.id ASC
-    RETURNING
-        id
 ), chat_messages AS (
     -- This CTE intentionally shadows the table name so sqlc keeps returning
     -- ChatMessage while PostgreSQL reads the rows from inserted_messages.
@@ -715,12 +580,6 @@ WITH updated_chat AS (
         inserted_messages.*
     FROM
         inserted_messages
-    CROSS JOIN (
-        SELECT
-            COUNT(*)
-        FROM
-            inserted_events
-    ) AS inserted_events_count
 )
 SELECT
     chat_messages.*

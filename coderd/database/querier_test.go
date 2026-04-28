@@ -10113,13 +10113,12 @@ func TestGetChatMessagesForPromptByChatID(t *testing.T) {
 
 	insertCompactionBoundary := func(t *testing.T, chatID uuid.UUID, summaryID int64) {
 		t.Helper()
-		_, err := db.InsertChatContextBoundaryEvent(ctx, database.InsertChatContextBoundaryEventParams{
-			ChatID:                   chatID,
-			BoundaryKind:             "compact",
-			BoundarySource:           "automatic",
-			BoundaryScope:            "chat",
-			BoundarySummaryMessageID: sql.NullInt64{Int64: summaryID, Valid: true},
-			Visible:                  false,
+		_, err := db.InsertChatContextBoundary(ctx, database.InsertChatContextBoundaryParams{
+			ChatID:           chatID,
+			Kind:             string(codersdk.ChatContextBoundaryKindCompact),
+			AfterMessageID:   sql.NullInt64{Int64: summaryID, Valid: true},
+			SummaryMessageID: sql.NullInt64{Int64: summaryID, Valid: true},
+			Visible:          false,
 		})
 		require.NoError(t, err)
 	}

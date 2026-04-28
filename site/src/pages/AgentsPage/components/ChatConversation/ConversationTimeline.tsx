@@ -45,10 +45,7 @@ import {
 	AttachmentBlock,
 	type PreviewTextAttachment,
 } from "./AttachmentBlocks";
-import {
-	buildMessageCreatedEventIDByMessageID,
-	getSortedVisibleClearBoundaryEvents,
-} from "./chatHelpers";
+import { getSortedVisibleClearBoundaries } from "./chatHelpers";
 import { ExpiredFileIdsProvider } from "./ExpiredFileIdsContext";
 import { deriveMessageDisplayState } from "./messageHelpers";
 import { getEditableUserMessagePayload } from "./messageParsing";
@@ -985,8 +982,8 @@ interface ConversationTimelineProps {
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 	showDesktopPreviews?: boolean;
 	isTurnActive?: boolean;
-	// Ordered by ascending event ID by AgentChatPage.
-	events: readonly TypesGen.ChatEvent[];
+	// Ordered by ascending boundary ID by AgentChatPage.
+	contextBoundaries: readonly TypesGen.ChatContextBoundary[];
 }
 
 export const ConversationTimeline = memo<ConversationTimelineProps>(
@@ -1002,11 +999,11 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 		urlTransform,
 		mcpServers,
 		showDesktopPreviews,
-		events,
+		contextBoundaries,
 	}) => {
 		const lastInChainFlags = computeLastInChainFlags(parsedMessages);
 
-		if (parsedMessages.length === 0 && events.length === 0) {
+		if (parsedMessages.length === 0 && contextBoundaries.length === 0) {
 			return null;
 		}
 
@@ -1103,9 +1100,7 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 			);
 		};
 
-		const clearBoundaryEvents = getSortedVisibleClearBoundaryEvents(events);
-		const messageCreatedEventIDByMessageID =
-			buildMessageCreatedEventIDByMessageID(events);
+		const clearBoundaries = getSortedVisibleClearBoundaries(contextBoundaries);
 		const timelineNodes: ReactNode[] = [];
 		let nextClearBoundaryIndex = 0;
 		for (let msgIdx = 0; msgIdx < parsedMessages.length; msgIdx += 1) {
@@ -1113,38 +1108,24 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 			if (!entry) {
 				continue;
 			}
-			const messageCreatedEventID = messageCreatedEventIDByMessageID.get(
-				entry.message.id,
-			);
-			if (messageCreatedEventID === undefined) {
-				if (process.env.NODE_ENV !== "production") {
-					console.warn(
-						`[ConversationTimeline] missing message_created event for message ${entry.message.id}.`,
-					);
+			while (nextClearBoundaryIndex < clearBoundaries.length) {
+				const clearBoundary = clearBoundaries[nextClearBoundaryIndex];
+				if (!clearBoundary) {
+					break;
 				}
-			} else {
-				while (nextClearBoundaryIndex < clearBoundaryEvents.length) {
-					const clearBoundary = clearBoundaryEvents[nextClearBoundaryIndex];
-					if (!clearBoundary) {
-						break;
-					}
-					const afterEventID = clearBoundary.context_boundary.after_event_id;
-					if (
-						afterEventID !== undefined &&
-						messageCreatedEventID <= afterEventID
-					) {
-						break;
-					}
-					timelineNodes.push(
-						<ClearBoundaryDivider key={`clear-boundary-${clearBoundary.id}`} />,
-					);
-					nextClearBoundaryIndex += 1;
+				const afterMessageID = clearBoundary.after_message_id;
+				if (afterMessageID != null && entry.message.id <= afterMessageID) {
+					break;
 				}
+				timelineNodes.push(
+					<ClearBoundaryDivider key={`clear-boundary-${clearBoundary.id}`} />,
+				);
+				nextClearBoundaryIndex += 1;
 			}
 			timelineNodes.push(renderMessageEntry(entry, msgIdx));
 		}
-		while (nextClearBoundaryIndex < clearBoundaryEvents.length) {
-			const clearBoundary = clearBoundaryEvents[nextClearBoundaryIndex];
+		while (nextClearBoundaryIndex < clearBoundaries.length) {
+			const clearBoundary = clearBoundaries[nextClearBoundaryIndex];
 			if (!clearBoundary) {
 				break;
 			}

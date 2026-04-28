@@ -508,42 +508,33 @@ type UploadChatFileResponse struct {
 	ID uuid.UUID `json:"id" format:"uuid"`
 }
 
-// ChatEventType represents the kind of event in the chat timeline.
-type ChatEventType string
+// ChatContextBoundaryKind identifies why a chat context boundary exists.
+type ChatContextBoundaryKind string
 
 const (
-	ChatEventTypeMessageCreated  ChatEventType = "message_created"
-	ChatEventTypeContextBoundary ChatEventType = "context_boundary"
+	ChatContextBoundaryKindClear   ChatContextBoundaryKind = "clear"
+	ChatContextBoundaryKindCompact ChatContextBoundaryKind = "compact"
 )
 
-// ChatContextBoundary marks a boundary in model context assembly.
+// ChatContextBoundary stores a cutoff used during model context assembly.
 type ChatContextBoundary struct {
-	Kind             string         `json:"kind"`
-	Source           string         `json:"source"`
-	Scope            string         `json:"scope"`
-	AfterEventID     *int64         `json:"after_event_id,omitempty"`
-	SummaryMessageID *int64         `json:"summary_message_id,omitempty"`
-	Visible          bool           `json:"visible"`
-	CreatedBy        *uuid.UUID     `json:"created_by,omitempty" format:"uuid"`
-	Metadata         map[string]any `json:"metadata"`
-}
-
-// ChatEvent is an entry in a chat timeline.
-type ChatEvent struct {
-	ID              int64                `json:"id"`
-	ChatID          uuid.UUID            `json:"chat_id" format:"uuid"`
-	Type            ChatEventType        `json:"type"`
-	Message         *ChatMessage         `json:"message,omitempty"`
-	ContextBoundary *ChatContextBoundary `json:"context_boundary,omitempty"`
-	CreatedAt       time.Time            `json:"created_at" format:"date-time"`
+	ID               int64                   `json:"id"`
+	ChatID           uuid.UUID               `json:"chat_id" format:"uuid"`
+	Kind             ChatContextBoundaryKind `json:"kind"`
+	AfterMessageID   *int64                  `json:"after_message_id,omitempty"`
+	SummaryMessageID *int64                  `json:"summary_message_id,omitempty"`
+	Visible          bool                    `json:"visible"`
+	CreatedBy        *uuid.UUID              `json:"created_by,omitempty" format:"uuid"`
+	CreatedAt        time.Time               `json:"created_at" format:"date-time"`
+	Metadata         map[string]any          `json:"metadata"`
 }
 
 // ChatMessagesResponse contains messages and queued messages for a chat.
 type ChatMessagesResponse struct {
-	Messages       []ChatMessage       `json:"messages"`
-	QueuedMessages []ChatQueuedMessage `json:"queued_messages"`
-	Events         []ChatEvent         `json:"events,omitempty"`
-	HasMore        bool                `json:"has_more"`
+	Messages          []ChatMessage         `json:"messages"`
+	QueuedMessages    []ChatQueuedMessage   `json:"queued_messages"`
+	ContextBoundaries []ChatContextBoundary `json:"context_boundaries,omitempty"`
+	HasMore           bool                  `json:"has_more"`
 }
 
 // ChatModelProviderUnavailableReason explains why a provider cannot be used.
@@ -1306,17 +1297,7 @@ const (
 
 // ChatStreamContextBoundary is the payload of a context_boundary stream event.
 type ChatStreamContextBoundary struct {
-	ChatID           uuid.UUID      `json:"chat_id" format:"uuid"`
-	EventID          int64          `json:"event_id"`
-	Kind             string         `json:"kind"`
-	Source           string         `json:"source"`
-	Scope            string         `json:"scope"`
-	Visible          bool           `json:"visible"`
-	AfterEventID     *int64         `json:"after_event_id,omitempty"`
-	SummaryMessageID *int64         `json:"summary_message_id,omitempty"`
-	CreatedBy        *uuid.UUID     `json:"created_by,omitempty" format:"uuid"`
-	CreatedAt        time.Time      `json:"created_at" format:"date-time"`
-	Metadata         map[string]any `json:"metadata"`
+	Boundary ChatContextBoundary `json:"boundary"`
 }
 
 // ChatQueuedMessage represents a queued message waiting to be processed.

@@ -142,37 +142,22 @@ const baseChatFields = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const buildMessageCreatedEvent = (
-	message: TypesGen.ChatMessage,
-): TypesGen.ChatEvent => ({
-	id: message.id * 2,
-	chat_id: message.chat_id,
-	type: "message_created",
-	message,
-	created_at: message.created_at,
-});
-
-const buildVisibleClearBoundaryEvent = ({
+const buildVisibleClearBoundary = ({
 	id,
-	afterEventID,
+	afterMessageID,
 	createdAt = "2026-02-18T00:00:01.000Z",
 }: {
 	id: number;
-	afterEventID?: number;
+	afterMessageID?: number;
 	createdAt?: string;
-}): TypesGen.ChatEvent => ({
+}): TypesGen.ChatContextBoundary => ({
 	id,
 	chat_id: CHAT_ID,
-	type: "context_boundary",
-	context_boundary: {
-		kind: "clear",
-		source: "user",
-		scope: "chat",
-		...(afterEventID === undefined ? {} : { after_event_id: afterEventID }),
-		visible: true,
-		metadata: {},
-	},
+	kind: "clear",
+	...(afterMessageID === undefined ? {} : { after_message_id: afterMessageID }),
+	visible: true,
 	created_at: createdAt,
+	metadata: {},
 });
 
 /** A small sample unified diff for stories that show the diff panel. */
@@ -210,17 +195,15 @@ const buildQueries = (
 		...chat,
 		diff_status: diffStatus,
 	};
-	const messagesDataWithEvents: TypesGen.ChatMessagesResponse = {
+	const messagesDataWithBoundaries: TypesGen.ChatMessagesResponse = {
 		...messagesData,
-		events:
-			messagesData.events ??
-			messagesData.messages.map(buildMessageCreatedEvent),
+		context_boundaries: messagesData.context_boundaries ?? [],
 	};
 	return [
 		{ key: chatKey(CHAT_ID), data: chatWithDiffStatus },
 		{
 			key: chatMessagesKey(CHAT_ID),
-			data: { pages: [messagesDataWithEvents], pageParams: [undefined] },
+			data: { pages: [messagesDataWithBoundaries], pageParams: [undefined] },
 		},
 		{ key: chatsKey, data: [chatWithDiffStatus] },
 		{
@@ -698,9 +681,8 @@ export const ClearCommandResult: Story = {
 		const refreshedMessages = {
 			messages: [refreshedMessage],
 			queued_messages: [],
-			events: [
-				buildMessageCreatedEvent(refreshedMessage),
-				buildVisibleClearBoundaryEvent({ id: 3, afterEventID: 2 }),
+			context_boundaries: [
+				buildVisibleClearBoundary({ id: 3, afterMessageID: 1 }),
 			],
 			has_more: false,
 		} satisfies TypesGen.ChatMessagesResponse;
@@ -845,15 +827,10 @@ export const RemoteContextBoundaryEvent: Story = {
 							type: "context_boundary",
 							chat_id: CHAT_ID,
 							context_boundary: {
-								chat_id: CHAT_ID,
-								event_id: 3,
-								kind: "clear",
-								source: "user",
-								scope: "chat",
-								visible: true,
-								after_event_id: 2,
-								created_at: "2026-02-18T00:00:01.000Z",
-								metadata: {},
+								boundary: buildVisibleClearBoundary({
+									id: 3,
+									afterMessageID: 1,
+								}),
 							},
 						},
 					] satisfies TypesGen.ChatStreamEvent[]),
@@ -872,9 +849,8 @@ export const RemoteContextBoundaryEvent: Story = {
 		spyOn(API.experimental, "getChatMessages").mockResolvedValue({
 			messages: [message],
 			queued_messages: [],
-			events: [
-				buildMessageCreatedEvent(message),
-				buildVisibleClearBoundaryEvent({ id: 3, afterEventID: 2 }),
+			context_boundaries: [
+				buildVisibleClearBoundary({ id: 3, afterMessageID: 1 }),
 			],
 			has_more: false,
 		});

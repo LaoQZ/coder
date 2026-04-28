@@ -1484,97 +1484,35 @@ func ChatMessage(m database.ChatMessage) codersdk.ChatMessage {
 	return msg
 }
 
-// ChatContextBoundary converts a context boundary event to SDK metadata.
-func ChatContextBoundary(event database.ChatEvent) codersdk.ChatContextBoundary {
+// ChatContextBoundary converts a database boundary to the SDK shape.
+func ChatContextBoundary(boundary database.ChatContextBoundary) codersdk.ChatContextBoundary {
 	return codersdk.ChatContextBoundary{
-		Kind:             event.BoundaryKind.String,
-		Source:           event.BoundarySource.String,
-		Scope:            event.BoundaryScope,
-		AfterEventID:     nullInt64Ptr(event.BoundaryAfterEventID),
-		SummaryMessageID: nullInt64Ptr(event.BoundarySummaryMessageID),
-		Visible:          event.Visible,
-		CreatedBy:        nullUUIDPtr(event.CreatedBy),
-		Metadata:         rawJSONOrEmptyMap(event.Metadata),
+		ID:               boundary.ID,
+		ChatID:           boundary.ChatID,
+		Kind:             codersdk.ChatContextBoundaryKind(boundary.Kind),
+		AfterMessageID:   nullInt64Ptr(boundary.AfterMessageID),
+		SummaryMessageID: nullInt64Ptr(boundary.SummaryMessageID),
+		Visible:          boundary.Visible,
+		CreatedBy:        nullUUIDPtr(boundary.CreatedBy),
+		CreatedAt:        boundary.CreatedAt,
+		Metadata:         rawJSONOrEmptyMap(boundary.Metadata),
 	}
 }
 
-// ChatStreamContextBoundary converts a context boundary event for streaming.
-func ChatStreamContextBoundary(event database.ChatEvent) codersdk.ChatStreamContextBoundary {
+// ChatContextBoundaries converts database boundaries to SDK shapes.
+func ChatContextBoundaries(boundaries []database.ChatContextBoundary) []codersdk.ChatContextBoundary {
+	out := make([]codersdk.ChatContextBoundary, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		out = append(out, ChatContextBoundary(boundary))
+	}
+	return out
+}
+
+// ChatStreamContextBoundary converts a database boundary for streaming.
+func ChatStreamContextBoundary(boundary database.ChatContextBoundary) codersdk.ChatStreamContextBoundary {
 	return codersdk.ChatStreamContextBoundary{
-		ChatID:           event.ChatID,
-		EventID:          event.ID,
-		Kind:             event.BoundaryKind.String,
-		Source:           event.BoundarySource.String,
-		Scope:            event.BoundaryScope,
-		Visible:          event.Visible,
-		AfterEventID:     nullInt64Ptr(event.BoundaryAfterEventID),
-		SummaryMessageID: nullInt64Ptr(event.BoundarySummaryMessageID),
-		CreatedBy:        nullUUIDPtr(event.CreatedBy),
-		CreatedAt:        event.CreatedAt,
-		Metadata:         rawJSONOrEmptyMap(event.Metadata),
+		Boundary: ChatContextBoundary(boundary),
 	}
-}
-
-// ChatEvent converts a timeline event to its SDK representation.
-func ChatEvent(event database.ChatEvent, message *database.ChatMessage) codersdk.ChatEvent {
-	sdkEvent := codersdk.ChatEvent{
-		ID:        event.ID,
-		ChatID:    event.ChatID,
-		Type:      codersdk.ChatEventType(event.Kind),
-		CreatedAt: event.CreatedAt,
-	}
-
-	switch codersdk.ChatEventType(event.Kind) {
-	case codersdk.ChatEventTypeMessageCreated:
-		if message != nil {
-			sdkMessage := ChatMessage(*message)
-			sdkEvent.Message = &sdkMessage
-		}
-	case codersdk.ChatEventTypeContextBoundary:
-		boundary := ChatContextBoundary(event)
-		sdkEvent.ContextBoundary = &boundary
-	}
-	return sdkEvent
-}
-
-// ChatEvents converts timeline events to SDK representations.
-func ChatEvents(events []database.ChatEvent, messages map[int64]database.ChatMessage) []codersdk.ChatEvent {
-	out := make([]codersdk.ChatEvent, 0, len(events))
-	for _, event := range events {
-		var message *database.ChatMessage
-		if event.MessageID.Valid {
-			if matched, ok := messages[event.MessageID.Int64]; ok {
-				message = &matched
-			}
-		}
-		out = append(out, ChatEvent(event, message))
-	}
-	return out
-}
-
-func chatEventFromProjection(row database.GetChatMessagePageEventsAndVisibleBoundariesRow) database.ChatEvent {
-	return database.ChatEvent(row)
-}
-
-// ChatEventFromMessagePageEvent converts a projection row to an SDK event.
-func ChatEventFromMessagePageEvent(row database.GetChatMessagePageEventsAndVisibleBoundariesRow, messages map[int64]database.ChatMessage) codersdk.ChatEvent {
-	event := chatEventFromProjection(row)
-	var message *database.ChatMessage
-	if row.MessageID.Valid {
-		if matched, ok := messages[row.MessageID.Int64]; ok {
-			message = &matched
-		}
-	}
-	return ChatEvent(event, message)
-}
-
-// ChatEventsFromMessagePageEvents converts projection rows to SDK events.
-func ChatEventsFromMessagePageEvents(rows []database.GetChatMessagePageEventsAndVisibleBoundariesRow, messages map[int64]database.ChatMessage) []codersdk.ChatEvent {
-	out := make([]codersdk.ChatEvent, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, ChatEventFromMessagePageEvent(row, messages))
-	}
-	return out
 }
 
 // chatMessageUsage builds a ChatMessageUsage from the database row,
