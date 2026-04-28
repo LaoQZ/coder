@@ -1,6 +1,7 @@
 package coderd
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -8,10 +9,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"cdr.dev/slog/v3"
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/db2sdk"
 	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/httpmw"
+	"github.com/coder/coder/v2/coderd/usersecretspubsub"
 	"github.com/coder/coder/v2/codersdk"
 )
 
@@ -92,6 +95,14 @@ func (api *API) postUserSecret(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	api.publishUserSecretEvent(ctx, usersecretspubsub.Event{
+		Kind:     usersecretspubsub.EventKindCreated,
+		UserID:   secret.UserID,
+		Name:     secret.Name,
+		EnvName:  secret.EnvName,
+		FilePath: secret.FilePath,
+	})
 
 	httpapi.Write(ctx, rw, http.StatusCreated, db2sdk.UserSecretFromFull(secret))
 }
@@ -252,6 +263,14 @@ func (api *API) patchUserSecret(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	api.publishUserSecretEvent(ctx, usersecretspubsub.Event{
+		Kind:     usersecretspubsub.EventKindUpdated,
+		UserID:   secret.UserID,
+		Name:     secret.Name,
+		EnvName:  secret.EnvName,
+		FilePath: secret.FilePath,
+	})
+
 	httpapi.Write(ctx, rw, http.StatusOK, db2sdk.UserSecretFromFull(secret))
 }
 
@@ -284,5 +303,22 @@ func (api *API) deleteUserSecret(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	api.publishUserSecretEvent(ctx, usersecretspubsub.Event{
+		Kind:   usersecretspubsub.EventKindDeleted,
+		UserID: user.ID,
+		Name:   name,
+	})
+
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) publishUserSecretEvent(ctx context.Context, event usersecretspubsub.Event) {
+	if err := usersecretspubsub.Publish(api.Pubsub, event); err != nil {
+		api.Logger.Warn(ctx, "failed to publish user secret event",
+			slog.F("user_id", event.UserID),
+			slog.F("secret_name", event.Name),
+			slog.F("event_kind", event.Kind),
+			slog.Error(err),
+		)
+	}
 }
