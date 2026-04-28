@@ -7,6 +7,7 @@ import { VirtualDesktopSettings } from "./components/VirtualDesktopSettings";
 
 export interface AgentSettingsExperimentsPageViewProps {
 	desktopEnabledData: TypesGen.ChatDesktopEnabledResponse | undefined;
+	isLoadingDesktopEnabled: boolean;
 	onSaveDesktopEnabled: UseMutateFunction<
 		void,
 		Error,
@@ -16,6 +17,7 @@ export interface AgentSettingsExperimentsPageViewProps {
 	isSavingDesktopEnabled: boolean;
 	isSaveDesktopEnabledError: boolean;
 	computerUseProviderData: TypesGen.ChatComputerUseProviderResponse | undefined;
+	isLoadingComputerUseProvider: boolean;
 	onSaveComputerUseProvider: UseMutateFunction<
 		void,
 		Error,
@@ -25,6 +27,7 @@ export interface AgentSettingsExperimentsPageViewProps {
 	isSavingComputerUseProvider: boolean;
 	computerUseProviderSaveError: Error | null;
 	debugLoggingData: TypesGen.ChatDebugLoggingAdminSettings | undefined;
+	isLoadingDebugLogging: boolean;
 	onSaveDebugLogging: UseMutateFunction<
 		void,
 		Error,
@@ -39,14 +42,17 @@ export const AgentSettingsExperimentsPageView: FC<
 	AgentSettingsExperimentsPageViewProps
 > = ({
 	desktopEnabledData,
+	isLoadingDesktopEnabled,
 	onSaveDesktopEnabled,
 	isSavingDesktopEnabled,
 	isSaveDesktopEnabledError,
 	computerUseProviderData,
+	isLoadingComputerUseProvider,
 	onSaveComputerUseProvider,
 	isSavingComputerUseProvider,
 	computerUseProviderSaveError,
 	debugLoggingData,
+	isLoadingDebugLogging,
 	onSaveDebugLogging,
 	isSavingDebugLogging,
 	isSaveDebugLoggingError,
@@ -59,16 +65,19 @@ export const AgentSettingsExperimentsPageView: FC<
 			/>
 			<VirtualDesktopSettings
 				desktopEnabledData={desktopEnabledData}
+				isLoadingDesktopEnabled={isLoadingDesktopEnabled}
 				onSaveDesktopEnabled={onSaveDesktopEnabled}
 				isSavingDesktopEnabled={isSavingDesktopEnabled}
 				isSaveDesktopEnabledError={isSaveDesktopEnabledError}
 				computerUseProviderData={computerUseProviderData}
+				isLoadingComputerUseProvider={isLoadingComputerUseProvider}
 				onSaveComputerUseProvider={onSaveComputerUseProvider}
 				isSavingComputerUseProvider={isSavingComputerUseProvider}
 				computerUseProviderSaveError={computerUseProviderSaveError}
 			/>
 			<AdminChatDebugLoggingSettings
 				adminSettings={debugLoggingData}
+				isLoadingAdminSetting={isLoadingDebugLogging}
 				onSaveAdminSetting={onSaveDebugLogging}
 				isSavingAdminSetting={isSavingDebugLogging}
 				isSaveAdminSettingError={isSaveDebugLoggingError}
