@@ -8896,16 +8896,17 @@ func TestClearChatContextPublishesEvent(t *testing.T) {
 		t.Parallel()
 
 		db, ps := dbtestutil.NewDB(t)
-		replica := newTestServer(t, db, ps, uuid.New())
+		clearReplica := newTestServer(t, db, ps, uuid.New())
+		subscribeReplica := newTestServer(t, db, ps, uuid.New())
 
 		ctx := testutil.Context(t, testutil.WaitLong)
 		user, org, model := seedChatDependencies(ctx, t, db)
 		chat := createClearContextTestChat(ctx, t, db, user, org, model, "clear-event", "")
-		_, events, cancel, ok := replica.Subscribe(ctx, chat.ID, nil, 0)
+		_, events, cancel, ok := subscribeReplica.Subscribe(ctx, chat.ID, nil, 0)
 		require.True(t, ok)
 		defer cancel()
 
-		err := replica.ClearChatContext(ctx, chat.ID, user.ID)
+		err := clearReplica.ClearChatContext(ctx, chat.ID, user.ID)
 		require.NoError(t, err)
 
 		var got codersdk.ChatStreamEvent

@@ -49,6 +49,11 @@ type ChatStreamNotifyMessage struct {
 	// QueueUpdate is set when the queued messages change.
 	QueueUpdate bool `json:"queue_update,omitempty"`
 
+	// ContextCleared is set when a hidden context boundary is inserted.
+	// Subscribers emit a context_cleared stream event and refresh message
+	// metadata, including clear boundaries and context usage.
+	ContextCleared bool `json:"context_cleared,omitempty"`
+
 	// FullRefresh signals that subscribers should re-fetch all
 	// messages from the beginning (e.g. after an edit that
 	// truncates message history).

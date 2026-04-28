@@ -1418,13 +1418,7 @@ func (p *Server) ClearChatContext(ctx context.Context, chatID uuid.UUID, created
 		return txErr
 	}
 
-	p.publishEvent(chatID, codersdk.ChatStreamEvent{
-		Type:   codersdk.ChatStreamEventTypeContextCleared,
-		ChatID: chatID,
-		ContextCleared: &codersdk.ChatStreamContextCleared{
-			ChatID: chatID,
-		},
-	})
+	p.publishContextCleared(chatID)
 	return nil
 }
 
@@ -4600,6 +4594,19 @@ func (p *Server) Subscribe(
 						}
 					}
 				}
+				if notify.ContextCleared {
+					select {
+					case <-mergedCtx.Done():
+						return
+					case mergedEvents <- codersdk.ChatStreamEvent{
+						Type:   codersdk.ChatStreamEventTypeContextCleared,
+						ChatID: chatID,
+						ContextCleared: &codersdk.ChatStreamContextCleared{
+							ChatID: chatID,
+						},
+					}:
+					}
+				}
 			case event, ok := <-localParts:
 				if !ok {
 					localParts = nil
@@ -4624,13 +4631,11 @@ func (p *Server) Subscribe(
 					// Pubsub will deliver a duplicate status
 					// later; the frontend deduplicates it
 					// (setChatStatus is idempotent).
-					// action_required and context_cleared are also
-					// transient local events, so they must be
-					// forwarded here.
+					// action_required is also a transient local
+					// event, so it must be forwarded here.
 					if event.Type == codersdk.ChatStreamEventTypeMessagePart ||
 						event.Type == codersdk.ChatStreamEventTypeStatus ||
-						event.Type == codersdk.ChatStreamEventTypeActionRequired ||
-						event.Type == codersdk.ChatStreamEventTypeContextCleared {
+						event.Type == codersdk.ChatStreamEventTypeActionRequired {
 						select {
 						case <-mergedCtx.Done():
 							return
@@ -4675,6 +4680,19 @@ func (p *Server) publishEvent(chatID uuid.UUID, event codersdk.ChatStreamEvent) 
 		event.ChatID = chatID
 	}
 	p.publishToStream(chatID, event)
+}
+
+func (p *Server) publishContextCleared(chatID uuid.UUID) {
+	p.publishEvent(chatID, codersdk.ChatStreamEvent{
+		Type:   codersdk.ChatStreamEventTypeContextCleared,
+		ChatID: chatID,
+		ContextCleared: &codersdk.ChatStreamContextCleared{
+			ChatID: chatID,
+		},
+	})
+	p.publishChatStreamNotify(chatID, coderdpubsub.ChatStreamNotifyMessage{
+		ContextCleared: true,
+	})
 }
 
 func (p *Server) publishStatus(chatID uuid.UUID, status database.ChatStatus, workerID uuid.NullUUID) {
