@@ -729,19 +729,24 @@ WITH updated_chat AS (
         inserted_messages.id ASC
     RETURNING
         id
+), chat_messages AS (
+    -- This CTE intentionally shadows the table name so sqlc keeps returning
+    -- ChatMessage while PostgreSQL reads the rows from inserted_messages.
+    SELECT
+        inserted_messages.*
+    FROM
+        inserted_messages
+    CROSS JOIN (
+        SELECT
+            COUNT(*)
+        FROM
+            inserted_events
+    ) AS inserted_events_count
 )
 SELECT
     chat_messages.*
 FROM
-    inserted_messages
-JOIN
-    chat_messages ON chat_messages.id = inserted_messages.id
-CROSS JOIN (
-    SELECT
-        COUNT(*)
-    FROM
-        inserted_events
-) AS inserted_events_count
+    chat_messages
 ORDER BY
     chat_messages.id ASC;
 

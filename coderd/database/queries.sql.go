@@ -7963,19 +7963,24 @@ WITH updated_chat AS (
         inserted_messages.id ASC
     RETURNING
         id
+), chat_messages AS (
+    -- This CTE intentionally shadows the table name so sqlc keeps returning
+    -- ChatMessage while PostgreSQL reads the rows from inserted_messages.
+    SELECT
+        inserted_messages.id, inserted_messages.chat_id, inserted_messages.model_config_id, inserted_messages.created_at, inserted_messages.role, inserted_messages.content, inserted_messages.visibility, inserted_messages.input_tokens, inserted_messages.output_tokens, inserted_messages.total_tokens, inserted_messages.reasoning_tokens, inserted_messages.cache_creation_tokens, inserted_messages.cache_read_tokens, inserted_messages.context_limit, inserted_messages.compressed, inserted_messages.created_by, inserted_messages.content_version, inserted_messages.total_cost_micros, inserted_messages.runtime_ms, inserted_messages.deleted, inserted_messages.provider_response_id
+    FROM
+        inserted_messages
+    CROSS JOIN (
+        SELECT
+            COUNT(*)
+        FROM
+            inserted_events
+    ) AS inserted_events_count
 )
 SELECT
     chat_messages.id, chat_messages.chat_id, chat_messages.model_config_id, chat_messages.created_at, chat_messages.role, chat_messages.content, chat_messages.visibility, chat_messages.input_tokens, chat_messages.output_tokens, chat_messages.total_tokens, chat_messages.reasoning_tokens, chat_messages.cache_creation_tokens, chat_messages.cache_read_tokens, chat_messages.context_limit, chat_messages.compressed, chat_messages.created_by, chat_messages.content_version, chat_messages.total_cost_micros, chat_messages.runtime_ms, chat_messages.deleted, chat_messages.provider_response_id
 FROM
-    inserted_messages
-JOIN
-    chat_messages ON chat_messages.id = inserted_messages.id
-CROSS JOIN (
-    SELECT
-        COUNT(*)
-    FROM
-        inserted_events
-) AS inserted_events_count
+    chat_messages
 ORDER BY
     chat_messages.id ASC
 `
