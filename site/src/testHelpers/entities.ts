@@ -3422,6 +3422,7 @@ export const MockDynamicParametersResponse: TypesGen.DynamicParametersResponse =
 			MockMultiSelectParameter,
 		],
 		diagnostics: [],
+		secret_requirements: [],
 	};
 
 export const MockDynamicParametersResponseWithError: TypesGen.DynamicParametersResponse =
@@ -3438,6 +3439,7 @@ export const MockDynamicParametersResponseWithError: TypesGen.DynamicParametersR
 				},
 			},
 		],
+		secret_requirements: [],
 	};
 
 export const MockTemplateVersionExternalAuthGithub: TypesGen.TemplateVersionExternalAuth =
