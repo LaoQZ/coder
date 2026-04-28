@@ -1304,6 +1304,22 @@ func (m queryMetricsStore) GetChatMessageByID(ctx context.Context, id int64) (da
 	return r0, r1
 }
 
+func (m queryMetricsStore) GetChatMessageCreatedEventByChatIDAndMessageID(ctx context.Context, arg database.GetChatMessageCreatedEventByChatIDAndMessageIDParams) (database.ChatEvent, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetChatMessageCreatedEventByChatIDAndMessageID(ctx, arg)
+	m.queryLatencies.WithLabelValues("GetChatMessageCreatedEventByChatIDAndMessageID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatMessageCreatedEventByChatIDAndMessageID").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) GetChatMessagePageEventsAndVisibleBoundaries(ctx context.Context, arg database.GetChatMessagePageEventsAndVisibleBoundariesParams) ([]database.GetChatMessagePageEventsAndVisibleBoundariesRow, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetChatMessagePageEventsAndVisibleBoundaries(ctx, arg)
+	m.queryLatencies.WithLabelValues("GetChatMessagePageEventsAndVisibleBoundaries").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatMessagePageEventsAndVisibleBoundaries").Inc()
+	return r0, r1
+}
+
 func (m queryMetricsStore) GetChatMessageSummariesPerChat(ctx context.Context, createdAfter time.Time) ([]database.GetChatMessageSummariesPerChatRow, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetChatMessageSummariesPerChat(ctx, createdAfter)
@@ -1453,6 +1469,14 @@ func (m queryMetricsStore) GetChatTemplateAllowlist(ctx context.Context) (string
 	r0, r1 := m.s.GetChatTemplateAllowlist(ctx)
 	m.queryLatencies.WithLabelValues("GetChatTemplateAllowlist").Observe(time.Since(start).Seconds())
 	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatTemplateAllowlist").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) GetChatTimelineEventsByChatIDDescPaginated(ctx context.Context, arg database.GetChatTimelineEventsByChatIDDescPaginatedParams) ([]database.ChatEvent, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetChatTimelineEventsByChatIDDescPaginated(ctx, arg)
+	m.queryLatencies.WithLabelValues("GetChatTimelineEventsByChatIDDescPaginated").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetChatTimelineEventsByChatIDDescPaginated").Inc()
 	return r0, r1
 }
 
@@ -1832,6 +1856,14 @@ func (m queryMetricsStore) GetLastUpdateCheck(ctx context.Context) (string, erro
 	return r0, r1
 }
 
+func (m queryMetricsStore) GetLatestChatContextBoundaryEventByChatID(ctx context.Context, chatID uuid.UUID) (database.ChatEvent, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetLatestChatContextBoundaryEventByChatID(ctx, chatID)
+	m.queryLatencies.WithLabelValues("GetLatestChatContextBoundaryEventByChatID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetLatestChatContextBoundaryEventByChatID").Inc()
+	return r0, r1
+}
+
 func (m queryMetricsStore) GetLatestCryptoKeyByFeature(ctx context.Context, feature database.CryptoKeyFeature) (database.CryptoKey, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetLatestCryptoKeyByFeature(ctx, feature)
@@ -1949,6 +1981,14 @@ func (m queryMetricsStore) GetMCPServerUserTokensByUserID(ctx context.Context, u
 	r0, r1 := m.s.GetMCPServerUserTokensByUserID(ctx, userID)
 	m.queryLatencies.WithLabelValues("GetMCPServerUserTokensByUserID").Observe(time.Since(start).Seconds())
 	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetMCPServerUserTokensByUserID").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) GetMaxChatEventIDByChatID(ctx context.Context, chatID uuid.UUID) (int64, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetMaxChatEventIDByChatID(ctx, chatID)
+	m.queryLatencies.WithLabelValues("GetMaxChatEventIDByChatID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetMaxChatEventIDByChatID").Inc()
 	return r0, r1
 }
 
@@ -3485,6 +3525,14 @@ func (m queryMetricsStore) InsertChat(ctx context.Context, arg database.InsertCh
 	r0, r1 := m.s.InsertChat(ctx, arg)
 	m.queryLatencies.WithLabelValues("InsertChat").Observe(time.Since(start).Seconds())
 	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "InsertChat").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) InsertChatContextBoundaryEvent(ctx context.Context, arg database.InsertChatContextBoundaryEventParams) (database.ChatEvent, error) {
+	start := time.Now()
+	r0, r1 := m.s.InsertChatContextBoundaryEvent(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertChatContextBoundaryEvent").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "InsertChatContextBoundaryEvent").Inc()
 	return r0, r1
 }
 

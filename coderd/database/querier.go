@@ -325,6 +325,8 @@ type sqlcQuerier interface {
 	// otherwise the setting defaults to true.
 	GetChatIncludeDefaultSystemPrompt(ctx context.Context) (bool, error)
 	GetChatMessageByID(ctx context.Context, id int64) (ChatMessage, error)
+	GetChatMessageCreatedEventByChatIDAndMessageID(ctx context.Context, arg GetChatMessageCreatedEventByChatIDAndMessageIDParams) (ChatEvent, error)
+	GetChatMessagePageEventsAndVisibleBoundaries(ctx context.Context, arg GetChatMessagePageEventsAndVisibleBoundariesParams) ([]GetChatMessagePageEventsAndVisibleBoundariesRow, error)
 	// Aggregates message-level metrics per chat for messages created
 	// after the given timestamp. Uses message created_at so that
 	// ongoing activity in long-running chats is captured each window.
@@ -359,6 +361,7 @@ type sqlcQuerier interface {
 	// GetChatTemplateAllowlist returns the JSON-encoded template allowlist.
 	// Returns an empty string when no allowlist has been configured (all templates allowed).
 	GetChatTemplateAllowlist(ctx context.Context) (string, error)
+	GetChatTimelineEventsByChatIDDescPaginated(ctx context.Context, arg GetChatTimelineEventsByChatIDDescPaginatedParams) ([]ChatEvent, error)
 	GetChatUsageLimitConfig(ctx context.Context) (ChatUsageLimitConfig, error)
 	GetChatUsageLimitGroupOverride(ctx context.Context, groupID uuid.UUID) (GetChatUsageLimitGroupOverrideRow, error)
 	GetChatUsageLimitUserOverride(ctx context.Context, userID uuid.UUID) (GetChatUsageLimitUserOverrideRow, error)
@@ -433,6 +436,7 @@ type sqlcQuerier interface {
 	GetInboxNotificationsByUserID(ctx context.Context, arg GetInboxNotificationsByUserIDParams) ([]InboxNotification, error)
 	GetLastChatMessageByRole(ctx context.Context, arg GetLastChatMessageByRoleParams) (ChatMessage, error)
 	GetLastUpdateCheck(ctx context.Context) (string, error)
+	GetLatestChatContextBoundaryEventByChatID(ctx context.Context, chatID uuid.UUID) (ChatEvent, error)
 	GetLatestCryptoKeyByFeature(ctx context.Context, feature CryptoKeyFeature) (CryptoKey, error)
 	GetLatestWorkspaceAppStatusByAppID(ctx context.Context, appID uuid.UUID) (WorkspaceAppStatus, error)
 	GetLatestWorkspaceAppStatusesByWorkspaceIDs(ctx context.Context, ids []uuid.UUID) ([]WorkspaceAppStatus, error)
@@ -448,6 +452,7 @@ type sqlcQuerier interface {
 	GetMCPServerConfigsByIDs(ctx context.Context, ids []uuid.UUID) ([]MCPServerConfig, error)
 	GetMCPServerUserToken(ctx context.Context, arg GetMCPServerUserTokenParams) (MCPServerUserToken, error)
 	GetMCPServerUserTokensByUserID(ctx context.Context, userID uuid.UUID) ([]MCPServerUserToken, error)
+	GetMaxChatEventIDByChatID(ctx context.Context, chatID uuid.UUID) (int64, error)
 	GetNotificationMessagesByStatus(ctx context.Context, arg GetNotificationMessagesByStatusParams) ([]NotificationMessage, error)
 	// Fetch the notification report generator log indicating recent activity.
 	GetNotificationReportGeneratorLogByTemplate(ctx context.Context, templateID uuid.UUID) (NotificationReportGeneratorLog, error)
@@ -811,6 +816,7 @@ type sqlcQuerier interface {
 	InsertAllUsersGroup(ctx context.Context, organizationID uuid.UUID) (Group, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (AuditLog, error)
 	InsertChat(ctx context.Context, arg InsertChatParams) (Chat, error)
+	InsertChatContextBoundaryEvent(ctx context.Context, arg InsertChatContextBoundaryEventParams) (ChatEvent, error)
 	InsertChatDebugRun(ctx context.Context, arg InsertChatDebugRunParams) (ChatDebugRun, error)
 	// The CTE atomically locks the parent run via UPDATE, bumps its
 	// updated_at (eliminating a separate TouchChatDebugRunUpdatedAt

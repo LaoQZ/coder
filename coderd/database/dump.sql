@@ -1330,6 +1330,34 @@ CREATE TABLE chat_diff_statuses (
     head_branch text
 );
 
+CREATE TABLE chat_events (
+    id bigint NOT NULL,
+    chat_id uuid NOT NULL,
+    kind text NOT NULL,
+    message_id bigint,
+    boundary_kind text,
+    boundary_source text,
+    boundary_scope text DEFAULT 'chat'::text NOT NULL,
+    boundary_after_event_id bigint,
+    boundary_summary_message_id bigint,
+    visible boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT chat_events_boundary_scope_check CHECK ((boundary_scope <> ''::text)),
+    CONSTRAINT chat_events_check CHECK ((((kind = 'message_created'::text) AND (message_id IS NOT NULL) AND (boundary_kind IS NULL) AND (boundary_source IS NULL) AND (boundary_after_event_id IS NULL) AND (boundary_summary_message_id IS NULL)) OR ((kind = 'context_boundary'::text) AND (message_id IS NULL) AND (boundary_kind IS NOT NULL) AND (boundary_kind <> ''::text) AND (boundary_source IS NOT NULL) AND (boundary_source <> ''::text)))),
+    CONSTRAINT chat_events_kind_check CHECK ((kind = ANY (ARRAY['message_created'::text, 'context_boundary'::text])))
+);
+
+CREATE SEQUENCE chat_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE chat_events_id_seq OWNED BY chat_events.id;
+
 CREATE TABLE chat_file_links (
     chat_id uuid NOT NULL,
     file_id uuid NOT NULL
@@ -3370,6 +3398,8 @@ CREATE VIEW workspaces_expanded AS
 
 COMMENT ON VIEW workspaces_expanded IS 'Joins in the display name information such as username, avatar, and organization name.';
 
+ALTER TABLE ONLY chat_events ALTER COLUMN id SET DEFAULT nextval('chat_events_id_seq'::regclass);
+
 ALTER TABLE ONLY chat_messages ALTER COLUMN id SET DEFAULT nextval('chat_messages_id_seq'::regclass);
 
 ALTER TABLE ONLY chat_queued_messages ALTER COLUMN id SET DEFAULT nextval('chat_queued_messages_id_seq'::regclass);
@@ -3423,6 +3453,9 @@ ALTER TABLE ONLY chat_debug_steps
 
 ALTER TABLE ONLY chat_diff_statuses
     ADD CONSTRAINT chat_diff_statuses_pkey PRIMARY KEY (chat_id);
+
+ALTER TABLE ONLY chat_events
+    ADD CONSTRAINT chat_events_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY chat_file_links
     ADD CONSTRAINT chat_file_links_chat_id_file_id_key UNIQUE (chat_id, file_id);
@@ -3831,6 +3864,14 @@ CREATE INDEX idx_chat_debug_steps_stale ON chat_debug_steps USING btree (updated
 
 CREATE INDEX idx_chat_diff_statuses_stale_at ON chat_diff_statuses USING btree (stale_at);
 
+CREATE INDEX idx_chat_events_chat_id_id ON chat_events USING btree (chat_id, id);
+
+CREATE INDEX idx_chat_events_latest_boundary ON chat_events USING btree (chat_id, id DESC) WHERE ((kind = 'context_boundary'::text) AND (boundary_scope = 'chat'::text));
+
+CREATE UNIQUE INDEX idx_chat_events_message_id ON chat_events USING btree (message_id) WHERE (kind = 'message_created'::text);
+
+CREATE INDEX idx_chat_events_visible_timeline ON chat_events USING btree (chat_id, id) WHERE (visible = true);
+
 CREATE INDEX idx_chat_file_links_chat_id ON chat_file_links USING btree (chat_id);
 
 CREATE INDEX idx_chat_files_org ON chat_files USING btree (organization_id);
@@ -4146,6 +4187,18 @@ ALTER TABLE ONLY chat_debug_steps
 
 ALTER TABLE ONLY chat_diff_statuses
     ADD CONSTRAINT chat_diff_statuses_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY chat_events
+    ADD CONSTRAINT chat_events_boundary_after_event_id_fkey FOREIGN KEY (boundary_after_event_id) REFERENCES chat_events(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY chat_events
+    ADD CONSTRAINT chat_events_boundary_summary_message_id_fkey FOREIGN KEY (boundary_summary_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY chat_events
+    ADD CONSTRAINT chat_events_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY chat_events
+    ADD CONSTRAINT chat_events_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY chat_file_links
     ADD CONSTRAINT chat_file_links_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
