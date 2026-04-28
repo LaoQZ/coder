@@ -45,6 +45,10 @@ import {
 	AttachmentBlock,
 	type PreviewTextAttachment,
 } from "./AttachmentBlocks";
+import {
+	buildMessageCreatedEventIDByMessageID,
+	getSortedVisibleClearBoundaryEvents,
+} from "./chatHelpers";
 import { ExpiredFileIdsProvider } from "./ExpiredFileIdsContext";
 import { deriveMessageDisplayState } from "./messageHelpers";
 import { getEditableUserMessagePayload } from "./messageParsing";
@@ -954,7 +958,7 @@ function computeLastInChainFlags(
 	return flags;
 }
 
-const ContextClearDivider: FC = () => (
+const ClearBoundaryDivider: FC = () => (
 	<div className="flex items-center gap-3 px-3 py-2 text-xs text-content-secondary">
 		<div className="h-px flex-1 bg-border-default" />
 		<span className="rounded-full border border-border-default bg-surface-secondary px-2 py-1">
@@ -981,8 +985,8 @@ interface ConversationTimelineProps {
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 	showDesktopPreviews?: boolean;
 	isTurnActive?: boolean;
-	// Ordered by ascending message ID by AgentChatPage.
-	contextClears?: readonly TypesGen.ChatContextClear[];
+	// Ordered by ascending event ID by AgentChatPage.
+	events: readonly TypesGen.ChatEvent[];
 }
 
 export const ConversationTimeline = memo<ConversationTimelineProps>(
@@ -998,11 +1002,11 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 		urlTransform,
 		mcpServers,
 		showDesktopPreviews,
-		contextClears = [],
+		events,
 	}) => {
 		const lastInChainFlags = computeLastInChainFlags(parsedMessages);
 
-		if (parsedMessages.length === 0 && contextClears.length === 0) {
+		if (parsedMessages.length === 0 && events.length === 0) {
 			return null;
 		}
 
@@ -1099,34 +1103,55 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 			);
 		};
 
+		const clearBoundaryEvents = getSortedVisibleClearBoundaryEvents(events);
+		const messageCreatedEventIDByMessageID =
+			buildMessageCreatedEventIDByMessageID(events);
 		const timelineNodes: ReactNode[] = [];
-		let nextContextClearIndex = 0;
+		let nextClearBoundaryIndex = 0;
 		for (let msgIdx = 0; msgIdx < parsedMessages.length; msgIdx += 1) {
 			const entry = parsedMessages[msgIdx];
 			if (!entry) {
 				continue;
 			}
-			while (nextContextClearIndex < contextClears.length) {
-				const contextClear = contextClears[nextContextClearIndex];
-				if (!contextClear || contextClear.id >= entry.message.id) {
-					break;
+			const messageCreatedEventID = messageCreatedEventIDByMessageID.get(
+				entry.message.id,
+			);
+			if (messageCreatedEventID === undefined) {
+				if (process.env.NODE_ENV !== "production") {
+					console.warn(
+						`[ConversationTimeline] missing message_created event for message ${entry.message.id}.`,
+					);
 				}
-				timelineNodes.push(
-					<ContextClearDivider key={`context-clear-${contextClear.id}`} />,
-				);
-				nextContextClearIndex += 1;
+			} else {
+				while (nextClearBoundaryIndex < clearBoundaryEvents.length) {
+					const clearBoundary = clearBoundaryEvents[nextClearBoundaryIndex];
+					if (!clearBoundary) {
+						break;
+					}
+					const afterEventID = clearBoundary.context_boundary.after_event_id;
+					if (
+						afterEventID !== undefined &&
+						messageCreatedEventID <= afterEventID
+					) {
+						break;
+					}
+					timelineNodes.push(
+						<ClearBoundaryDivider key={`clear-boundary-${clearBoundary.id}`} />,
+					);
+					nextClearBoundaryIndex += 1;
+				}
 			}
 			timelineNodes.push(renderMessageEntry(entry, msgIdx));
 		}
-		while (nextContextClearIndex < contextClears.length) {
-			const contextClear = contextClears[nextContextClearIndex];
-			if (!contextClear) {
+		while (nextClearBoundaryIndex < clearBoundaryEvents.length) {
+			const clearBoundary = clearBoundaryEvents[nextClearBoundaryIndex];
+			if (!clearBoundary) {
 				break;
 			}
 			timelineNodes.push(
-				<ContextClearDivider key={`context-clear-${contextClear.id}`} />,
+				<ClearBoundaryDivider key={`clear-boundary-${clearBoundary.id}`} />,
 			);
-			nextContextClearIndex += 1;
+			nextClearBoundaryIndex += 1;
 		}
 
 		return (

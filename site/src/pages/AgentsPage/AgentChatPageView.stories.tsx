@@ -176,6 +176,7 @@ const StoryAgentChatPageView: FC<StoryProps> = ({ editing, ...overrides }) => {
 		onMCPSelectionChange: fn(),
 		onMCPAuthComplete: fn(),
 		...overrides,
+		events: overrides.events ?? [],
 		store,
 		messageCount: overrides.messageCount ?? messageCount,
 		editing: buildEditing(editing),

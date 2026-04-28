@@ -108,7 +108,7 @@ interface AgentChatPageViewProps {
 	planModeEnabled?: boolean;
 	onPlanModeToggle?: (enabled: boolean) => void;
 	compressionThreshold: number | undefined;
-	contextClears?: readonly TypesGen.ChatContextClear[];
+	events: readonly TypesGen.ChatEvent[];
 	isInputDisabled: boolean;
 	isSubmissionPending: boolean;
 	isInterruptPending: boolean;
@@ -202,7 +202,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 	planModeEnabled,
 	onPlanModeToggle,
 	compressionThreshold,
-	contextClears = [],
+	events,
 	isInputDisabled,
 	isSubmissionPending,
 	isInterruptPending,
@@ -486,7 +486,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 									mcpServers={mcpServers}
 									onImplementPlan={onImplementPlan}
 									onSendAskUserQuestionResponse={canSendAskUserQuestionResponse}
-									contextClears={contextClears}
+									events={events}
 								/>
 							</div>
 						</ChatScrollContainer>
@@ -495,7 +495,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								organizationId={organizationId}
 								store={store}
 								compressionThreshold={compressionThreshold}
-								contextClears={contextClears}
+								events={events}
 								onSend={editing.handleSendFromInput}
 								onDeleteQueuedMessage={handleDeleteQueuedMessage}
 								onPromoteQueuedMessage={handlePromoteQueuedMessage}

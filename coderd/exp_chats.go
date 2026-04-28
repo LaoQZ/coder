@@ -1770,13 +1770,11 @@ func (api *API) getChatMessages(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	events := db2sdk.ChatEventsFromMessagePageEvents(pageEvents, messageMap)
-	contextClears := db2sdk.ChatContextClears(pageEvents)
 
 	httpapi.Write(ctx, rw, http.StatusOK, codersdk.ChatMessagesResponse{
 		Messages:       convertChatMessages(messages),
 		QueuedMessages: convertChatQueuedMessages(queuedMessages),
 		Events:         events,
-		ContextClears:  contextClears,
 		HasMore:        hasMore,
 	})
 }

@@ -1351,17 +1351,6 @@ export interface ChatContextBoundary {
 }
 
 // From codersdk/chats.go
-/**
- * ChatContextClear marks where a user cleared model context in a chat.
- */
-export interface ChatContextClear {
-	readonly id: number;
-	readonly chat_id: string;
-	readonly created_by?: string;
-	readonly created_at: string;
-}
-
-// From codersdk/chats.go
 export interface ChatContextFilePart {
 	readonly type: "context-file";
 	/**
@@ -1927,7 +1916,6 @@ export interface ChatMessagesResponse {
 	readonly messages: readonly ChatMessage[];
 	readonly queued_messages: readonly ChatQueuedMessage[];
 	readonly events?: readonly ChatEvent[];
-	readonly context_clears?: readonly ChatContextClear[];
 	readonly has_more: boolean;
 }
 
@@ -2320,14 +2308,6 @@ export interface ChatStreamContextBoundary {
 
 // From codersdk/chats.go
 /**
- * ChatStreamContextCleared is the payload of a context_cleared stream event.
- */
-export interface ChatStreamContextCleared {
-	readonly chat_id: string;
-}
-
-// From codersdk/chats.go
-/**
  * ChatStreamError represents an error event in the stream.
  */
 export interface ChatStreamError {
@@ -2372,7 +2352,6 @@ export interface ChatStreamEvent {
 	readonly retry?: ChatStreamRetry;
 	readonly queued_messages?: readonly ChatQueuedMessage[];
 	readonly action_required?: ChatStreamActionRequired;
-	readonly context_cleared?: ChatStreamContextCleared;
 	readonly context_boundary?: ChatStreamContextBoundary;
 }
 
@@ -2380,7 +2359,6 @@ export interface ChatStreamEvent {
 export type ChatStreamEventType =
 	| "action_required"
 	| "context_boundary"
-	| "context_cleared"
 	| "error"
 	| "message"
 	| "message_part"
@@ -2391,7 +2369,6 @@ export type ChatStreamEventType =
 export const ChatStreamEventTypes: ChatStreamEventType[] = [
 	"action_required",
 	"context_boundary",
-	"context_cleared",
 	"error",
 	"message",
 	"message_part",

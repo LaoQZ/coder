@@ -383,8 +383,7 @@ WITH page_messages AS (
         chat_events.visible,
         chat_events.created_by,
         chat_events.created_at,
-        chat_events.metadata,
-        0::bigint AS legacy_placement_message_id
+        chat_events.metadata
     FROM
         chat_events
     JOIN
@@ -406,27 +405,7 @@ WITH page_messages AS (
         chat_events.visible,
         chat_events.created_by,
         chat_events.created_at,
-        chat_events.metadata,
-        CASE
-            WHEN chat_events.boundary_kind = 'clear' THEN COALESCE((
-                SELECT
-                    messages.id
-                FROM
-                    chat_events AS message_events
-                JOIN
-                    chat_messages AS messages ON messages.id = message_events.message_id
-                WHERE
-                    message_events.chat_id = chat_events.chat_id
-                    AND message_events.kind = 'message_created'
-                    AND chat_events.boundary_after_event_id IS NOT NULL
-                    AND message_events.id <= chat_events.boundary_after_event_id
-                ORDER BY
-                    message_events.id DESC
-                LIMIT
-                    1
-            ), 0)
-            ELSE 0
-        END::bigint AS legacy_placement_message_id
+        chat_events.metadata
     FROM
         chat_events
     WHERE

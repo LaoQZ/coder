@@ -870,13 +870,13 @@ const AgentChatPage: FC = () => {
 	// Queued messages are only in the first page (most recent).
 	const chatQueuedMessages = chatMessagesQuery.data?.pages[0]?.queued_messages;
 
-	const chatContextClears = (() => {
+	const chatEvents = (() => {
 		const pages = chatMessagesQuery.data?.pages;
 		if (!pages || pages.length === 0) return undefined;
 		const byID = new Map(
 			pages
-				.flatMap((page) => page.context_clears ?? [])
-				.map((clear) => [clear.id, clear]),
+				.flatMap((page) => page.events ?? [])
+				.map((event) => [event.id, event]),
 		);
 		const deduped = Array.from(byID.values());
 		deduped.sort((a, b) => a.id - b.id);
@@ -890,7 +890,7 @@ const AgentChatPage: FC = () => {
 			? {
 					messages: chatMessagesList,
 					queued_messages: chatQueuedMessages ?? [],
-					context_clears: chatContextClears ?? [],
+					events: chatEvents ?? [],
 					has_more: chatMessagesQuery.data?.pages.at(-1)?.has_more ?? false,
 				}
 			: undefined;
@@ -1541,7 +1541,7 @@ const AgentChatPage: FC = () => {
 			planModeEnabled={planModeEnabled}
 			onPlanModeToggle={handlePlanModeToggle}
 			compressionThreshold={compressionThreshold}
-			contextClears={chatContextClears ?? []}
+			events={chatEvents ?? []}
 			isInputDisabled={isInputDisabled}
 			isSubmissionPending={isSubmissionPending}
 			isInterruptPending={isInterruptPending}

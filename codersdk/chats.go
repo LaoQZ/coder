@@ -538,20 +538,11 @@ type ChatEvent struct {
 	CreatedAt       time.Time            `json:"created_at" format:"date-time"`
 }
 
-// ChatContextClear marks where a user cleared model context in a chat.
-type ChatContextClear struct {
-	ID        int64      `json:"id"`
-	ChatID    uuid.UUID  `json:"chat_id" format:"uuid"`
-	CreatedBy *uuid.UUID `json:"created_by,omitempty" format:"uuid"`
-	CreatedAt time.Time  `json:"created_at" format:"date-time"`
-}
-
 // ChatMessagesResponse contains messages and queued messages for a chat.
 type ChatMessagesResponse struct {
 	Messages       []ChatMessage       `json:"messages"`
 	QueuedMessages []ChatQueuedMessage `json:"queued_messages"`
 	Events         []ChatEvent         `json:"events,omitempty"`
-	ContextClears  []ChatContextClear  `json:"context_clears,omitempty"`
 	HasMore        bool                `json:"has_more"`
 }
 
@@ -1310,14 +1301,8 @@ const (
 	ChatStreamEventTypeQueueUpdate     ChatStreamEventType = "queue_update"
 	ChatStreamEventTypeRetry           ChatStreamEventType = "retry"
 	ChatStreamEventTypeActionRequired  ChatStreamEventType = "action_required"
-	ChatStreamEventTypeContextCleared  ChatStreamEventType = "context_cleared"
 	ChatStreamEventTypeContextBoundary ChatStreamEventType = "context_boundary"
 )
-
-// ChatStreamContextCleared is the payload of a context_cleared stream event.
-type ChatStreamContextCleared struct {
-	ChatID uuid.UUID `json:"chat_id" format:"uuid"`
-}
 
 // ChatStreamContextBoundary is the payload of a context_boundary stream event.
 type ChatStreamContextBoundary struct {
@@ -1507,7 +1492,6 @@ type ChatStreamEvent struct {
 	Retry           *ChatStreamRetry           `json:"retry,omitempty"`
 	QueuedMessages  []ChatQueuedMessage        `json:"queued_messages,omitempty"`
 	ActionRequired  *ChatStreamActionRequired  `json:"action_required,omitempty"`
-	ContextCleared  *ChatStreamContextCleared  `json:"context_cleared,omitempty"`
 	ContextBoundary *ChatStreamContextBoundary `json:"context_boundary,omitempty"`
 }
 

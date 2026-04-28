@@ -230,9 +230,46 @@ const buildUserMessage = ({
 	content: [...(text ? [buildTextPart(text)] : []), ...files],
 });
 
+const buildMessageCreatedEvent = (
+	id: number,
+	message: TypesGen.ChatMessage,
+): TypesGen.ChatEvent => ({
+	id,
+	chat_id: message.chat_id,
+	type: "message_created",
+	message,
+	created_at: message.created_at,
+});
+
+const buildVisibleClearBoundaryEvent = ({
+	id,
+	afterEventID,
+	createdAt = "2026-03-10T00:01:00.000Z",
+}: {
+	id: number;
+	afterEventID?: number;
+	createdAt?: string;
+}): TypesGen.ChatEvent => ({
+	id,
+	chat_id: baseMessage.chat_id,
+	type: "context_boundary",
+	context_boundary: {
+		kind: "clear",
+		source: "user",
+		scope: "chat",
+		...(afterEventID === undefined ? {} : { after_event_id: afterEventID }),
+		visible: true,
+		metadata: {},
+	},
+	created_at: createdAt,
+});
+
 const buildStoryArgs = (...messages: TypesGen.ChatMessage[]) => ({
 	...defaultArgs,
 	parsedMessages: buildMessages(messages),
+	events: messages.map((message, index) =>
+		buildMessageCreatedEvent((index + 1) * 2, message),
+	),
 });
 
 const findAttachmentTile = async (
@@ -271,6 +308,7 @@ const defaultArgs: Omit<
 	"parsedMessages"
 > = {
 	subagentTitles: new Map(),
+	events: [],
 };
 
 const meta: Meta<typeof ConversationTimeline> = {
@@ -329,28 +367,32 @@ export const UserMessageWithSingleImage: Story = {
 	},
 };
 
-export const ContextClearedDivider: Story = {
-	args: {
-		...defaultArgs,
-		contextClears: [
-			{
-				id: 2,
-				chat_id: baseMessage.chat_id,
-				created_at: "2026-03-10T00:01:00.000Z",
-			},
-		],
-		parsedMessages: buildMessages([
-			buildUserMessage({ id: 1, text: "What changed before the reset?" }),
-			{
-				...baseMessage,
-				id: 3,
-				role: "assistant",
-				content: [
-					buildTextPart("Only messages after the divider are in context."),
-				],
-			},
-		]),
-	},
+export const ClearBoundaryDivider: Story = {
+	args: (() => {
+		const firstMessage = buildUserMessage({
+			id: 1,
+			text: "What changed before the reset?",
+		});
+		const secondMessage: TypesGen.ChatMessage = {
+			...baseMessage,
+			id: 3,
+			role: "assistant",
+			content: [
+				buildTextPart("Only messages after the divider are in context."),
+			],
+		};
+		const firstMessageEvent = buildMessageCreatedEvent(2, firstMessage);
+		const secondMessageEvent = buildMessageCreatedEvent(4, secondMessage);
+		return {
+			...defaultArgs,
+			events: [
+				firstMessageEvent,
+				buildVisibleClearBoundaryEvent({ id: 3, afterEventID: 2 }),
+				secondMessageEvent,
+			],
+			parsedMessages: buildMessages([firstMessage, secondMessage]),
+		};
+	})(),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 		expect(canvas.getByText("Context cleared")).toBeInTheDocument();

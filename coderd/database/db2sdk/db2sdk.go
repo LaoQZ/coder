@@ -1553,21 +1553,7 @@ func ChatEvents(events []database.ChatEvent, messages map[int64]database.ChatMes
 }
 
 func chatEventFromProjection(row database.GetChatMessagePageEventsAndVisibleBoundariesRow) database.ChatEvent {
-	return database.ChatEvent{
-		ID:                       row.ID,
-		ChatID:                   row.ChatID,
-		Kind:                     row.Kind,
-		MessageID:                row.MessageID,
-		BoundaryKind:             row.BoundaryKind,
-		BoundarySource:           row.BoundarySource,
-		BoundaryScope:            row.BoundaryScope,
-		BoundaryAfterEventID:     row.BoundaryAfterEventID,
-		BoundarySummaryMessageID: row.BoundarySummaryMessageID,
-		Visible:                  row.Visible,
-		CreatedBy:                row.CreatedBy,
-		CreatedAt:                row.CreatedAt,
-		Metadata:                 row.Metadata,
-	}
+	return database.ChatEvent(row)
 }
 
 // ChatEventFromMessagePageEvent converts a projection row to an SDK event.
@@ -1587,30 +1573,6 @@ func ChatEventsFromMessagePageEvents(rows []database.GetChatMessagePageEventsAnd
 	out := make([]codersdk.ChatEvent, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, ChatEventFromMessagePageEvent(row, messages))
-	}
-	return out
-}
-
-// ChatContextClear converts a visible clear boundary to SDK metadata.
-func ChatContextClear(row database.GetChatMessagePageEventsAndVisibleBoundariesRow) codersdk.ChatContextClear {
-	return codersdk.ChatContextClear{
-		ID:        row.LegacyPlacementMessageID,
-		ChatID:    row.ChatID,
-		CreatedBy: nullUUIDPtr(row.CreatedBy),
-		CreatedAt: row.CreatedAt,
-	}
-}
-
-// ChatContextClears converts visible clear boundaries to SDK metadata.
-func ChatContextClears(rows []database.GetChatMessagePageEventsAndVisibleBoundariesRow) []codersdk.ChatContextClear {
-	out := make([]codersdk.ChatContextClear, 0, len(rows))
-	for _, row := range rows {
-		if row.Kind != string(codersdk.ChatEventTypeContextBoundary) ||
-			row.BoundaryKind.String != "clear" ||
-			row.LegacyPlacementMessageID <= 0 {
-			continue
-		}
-		out = append(out, ChatContextClear(row))
 	}
 	return out
 }

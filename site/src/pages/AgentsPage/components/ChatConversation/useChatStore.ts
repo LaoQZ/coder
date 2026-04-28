@@ -550,7 +550,7 @@ export const useChatStore = (
 							}
 							continue;
 						}
-						case "context_cleared":
+						case "context_boundary":
 							if (streamEvent.chat_id && streamEvent.chat_id !== chatID) {
 								continue;
 							}

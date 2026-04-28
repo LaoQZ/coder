@@ -6387,8 +6387,7 @@ WITH page_messages AS (
         chat_events.visible,
         chat_events.created_by,
         chat_events.created_at,
-        chat_events.metadata,
-        0::bigint AS legacy_placement_message_id
+        chat_events.metadata
     FROM
         chat_events
     JOIN
@@ -6410,27 +6409,7 @@ WITH page_messages AS (
         chat_events.visible,
         chat_events.created_by,
         chat_events.created_at,
-        chat_events.metadata,
-        CASE
-            WHEN chat_events.boundary_kind = 'clear' THEN COALESCE((
-                SELECT
-                    messages.id
-                FROM
-                    chat_events AS message_events
-                JOIN
-                    chat_messages AS messages ON messages.id = message_events.message_id
-                WHERE
-                    message_events.chat_id = chat_events.chat_id
-                    AND message_events.kind = 'message_created'
-                    AND chat_events.boundary_after_event_id IS NOT NULL
-                    AND message_events.id <= chat_events.boundary_after_event_id
-                ORDER BY
-                    message_events.id DESC
-                LIMIT
-                    1
-            ), 0)
-            ELSE 0
-        END::bigint AS legacy_placement_message_id
+        chat_events.metadata
     FROM
         chat_events
     WHERE
@@ -6439,15 +6418,15 @@ WITH page_messages AS (
         AND chat_events.visible = true
 )
 SELECT
-    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata, legacy_placement_message_id
+    id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
 FROM (
     SELECT
-        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata, legacy_placement_message_id
+        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
     FROM
         page_message_events
     UNION ALL
     SELECT
-        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata, legacy_placement_message_id
+        id, chat_id, kind, message_id, boundary_kind, boundary_source, boundary_scope, boundary_after_event_id, boundary_summary_message_id, visible, created_by, created_at, metadata
     FROM
         visible_boundaries
 ) AS timeline_events
@@ -6475,7 +6454,6 @@ type GetChatMessagePageEventsAndVisibleBoundariesRow struct {
 	CreatedBy                uuid.NullUUID   `db:"created_by" json:"created_by"`
 	CreatedAt                time.Time       `db:"created_at" json:"created_at"`
 	Metadata                 json.RawMessage `db:"metadata" json:"metadata"`
-	LegacyPlacementMessageID int64           `db:"legacy_placement_message_id" json:"legacy_placement_message_id"`
 }
 
 func (q *sqlQuerier) GetChatMessagePageEventsAndVisibleBoundaries(ctx context.Context, arg GetChatMessagePageEventsAndVisibleBoundariesParams) ([]GetChatMessagePageEventsAndVisibleBoundariesRow, error) {
@@ -6501,7 +6479,6 @@ func (q *sqlQuerier) GetChatMessagePageEventsAndVisibleBoundaries(ctx context.Co
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.Metadata,
-			&i.LegacyPlacementMessageID,
 		); err != nil {
 			return nil, err
 		}

@@ -8920,29 +8920,23 @@ func TestClearChatContextPublishesEvent(t *testing.T) {
 		_, err := clearReplica.ClearChatContext(ctx, chat.ID, user.ID)
 		require.NoError(t, err)
 
-		var gotBoundary, gotCleared codersdk.ChatStreamEvent
+		var gotBoundary codersdk.ChatStreamEvent
 		testutil.Eventually(ctx, t, func(context.Context) bool {
 			select {
 			case event := <-events:
-				switch event.Type {
-				case codersdk.ChatStreamEventTypeContextBoundary:
+				if event.Type == codersdk.ChatStreamEventTypeContextBoundary {
 					gotBoundary = event
-				case codersdk.ChatStreamEventTypeContextCleared:
-					gotCleared = event
 				}
 			default:
 			}
-			return gotBoundary.Type != "" && gotCleared.Type != ""
+			return gotBoundary.Type != ""
 		}, testutil.IntervalFast)
 		require.Equal(t, codersdk.ChatStreamEventTypeContextBoundary, gotBoundary.Type)
 		require.Equal(t, chat.ID, gotBoundary.ChatID)
 		require.NotNil(t, gotBoundary.ContextBoundary)
 		require.Equal(t, chat.ID, gotBoundary.ContextBoundary.ChatID)
 		require.Equal(t, "clear", gotBoundary.ContextBoundary.Kind)
-		require.Equal(t, codersdk.ChatStreamEventTypeContextCleared, gotCleared.Type)
-		require.Equal(t, chat.ID, gotCleared.ChatID)
-		require.NotNil(t, gotCleared.ContextCleared)
-		require.Equal(t, chat.ID, gotCleared.ContextCleared.ChatID)
+		require.True(t, gotBoundary.ContextBoundary.Visible)
 	})
 
 	t.Run("Failure", func(t *testing.T) {
@@ -8969,7 +8963,6 @@ func TestClearChatContextPublishesEvent(t *testing.T) {
 					return
 				}
 				require.NotEqual(t, codersdk.ChatStreamEventTypeContextBoundary, event.Type)
-				require.NotEqual(t, codersdk.ChatStreamEventTypeContextCleared, event.Type)
 			default:
 				return
 			}

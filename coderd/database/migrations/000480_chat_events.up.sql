@@ -64,62 +64,6 @@ SELECT
 FROM
     chat_messages;
 
-WITH clear_messages AS (
-    SELECT
-        chat_messages.*
-    FROM
-        chat_messages
-    WHERE
-        chat_messages.compressed = true
-        AND chat_messages.deleted = false
-        AND chat_messages.role = 'user'
-        AND chat_messages.visibility = 'model'
-        AND jsonb_typeof(chat_messages.content) = 'array'
-        AND jsonb_array_length(chat_messages.content) = 1
-        AND chat_messages.content->0->>'type' = 'text'
-        AND chat_messages.content->0->>'text' = 'Previous chat context was cleared by the user.'
-)
-INSERT INTO chat_events (
-    id,
-    chat_id,
-    kind,
-    boundary_kind,
-    boundary_source,
-    boundary_scope,
-    boundary_after_event_id,
-    visible,
-    created_by,
-    created_at
-)
-SELECT
-    clear_messages.id * 2 + 1,
-    clear_messages.chat_id,
-    'context_boundary',
-    'clear',
-    'user',
-    'chat',
-    clear_messages.id * 2,
-    true,
-    clear_messages.created_by,
-    clear_messages.created_at
-FROM
-    clear_messages;
-
-WITH clear_messages AS (
-    SELECT
-        chat_messages.id
-    FROM
-        chat_messages
-    WHERE
-        chat_messages.compressed = true
-        AND chat_messages.deleted = false
-        AND chat_messages.role = 'user'
-        AND chat_messages.visibility = 'model'
-        AND jsonb_typeof(chat_messages.content) = 'array'
-        AND jsonb_array_length(chat_messages.content) = 1
-        AND chat_messages.content->0->>'type' = 'text'
-        AND chat_messages.content->0->>'text' = 'Previous chat context was cleared by the user.'
-)
 INSERT INTO chat_events (
     id,
     chat_id,
@@ -150,15 +94,7 @@ FROM
 WHERE
     chat_messages.compressed = true
     AND chat_messages.deleted = false
-    AND chat_messages.visibility = 'model'
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            clear_messages
-        WHERE
-            clear_messages.id = chat_messages.id
-    );
+    AND chat_messages.visibility = 'model';
 
 SELECT setval(
     pg_get_serial_sequence('chat_events', 'id'),

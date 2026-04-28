@@ -142,6 +142,39 @@ const baseChatFields = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const buildMessageCreatedEvent = (
+	message: TypesGen.ChatMessage,
+): TypesGen.ChatEvent => ({
+	id: message.id * 2,
+	chat_id: message.chat_id,
+	type: "message_created",
+	message,
+	created_at: message.created_at,
+});
+
+const buildVisibleClearBoundaryEvent = ({
+	id,
+	afterEventID,
+	createdAt = "2026-02-18T00:00:01.000Z",
+}: {
+	id: number;
+	afterEventID?: number;
+	createdAt?: string;
+}): TypesGen.ChatEvent => ({
+	id,
+	chat_id: CHAT_ID,
+	type: "context_boundary",
+	context_boundary: {
+		kind: "clear",
+		source: "user",
+		scope: "chat",
+		...(afterEventID === undefined ? {} : { after_event_id: afterEventID }),
+		visible: true,
+		metadata: {},
+	},
+	created_at: createdAt,
+});
+
 /** A small sample unified diff for stories that show the diff panel. */
 const sampleDiff = `diff --git a/main.go b/main.go
 index abc1234..def5678 100644
@@ -177,11 +210,17 @@ const buildQueries = (
 		...chat,
 		diff_status: diffStatus,
 	};
+	const messagesDataWithEvents: TypesGen.ChatMessagesResponse = {
+		...messagesData,
+		events:
+			messagesData.events ??
+			messagesData.messages.map(buildMessageCreatedEvent),
+	};
 	return [
 		{ key: chatKey(CHAT_ID), data: chatWithDiffStatus },
 		{
 			key: chatMessagesKey(CHAT_ID),
-			data: { pages: [messagesData], pageParams: [undefined] },
+			data: { pages: [messagesDataWithEvents], pageParams: [undefined] },
 		},
 		{ key: chatsKey, data: [chatWithDiffStatus] },
 		{
@@ -649,23 +688,19 @@ export const ClearCommandResult: Story = {
 			title: "Clear command",
 			status: "completed",
 		} satisfies TypesGen.Chat;
+		const refreshedMessage: TypesGen.ChatMessage = {
+			id: 1,
+			chat_id: CHAT_ID,
+			created_at: "2026-02-18T00:00:00.000Z",
+			role: "user",
+			content: [{ type: "text", text: "Visible history" }],
+		};
 		const refreshedMessages = {
-			messages: [
-				{
-					id: 1,
-					chat_id: CHAT_ID,
-					created_at: "2026-02-18T00:00:00.000Z",
-					role: "user",
-					content: [{ type: "text", text: "Visible history" }],
-				},
-			],
+			messages: [refreshedMessage],
 			queued_messages: [],
-			context_clears: [
-				{
-					id: 2,
-					chat_id: CHAT_ID,
-					created_at: "2026-02-18T00:00:01.000Z",
-				},
+			events: [
+				buildMessageCreatedEvent(refreshedMessage),
+				buildVisibleClearBoundaryEvent({ id: 3, afterEventID: 2 }),
 			],
 			has_more: false,
 		} satisfies TypesGen.ChatMessagesResponse;
@@ -777,7 +812,7 @@ export const ClearCommandError: Story = {
 	},
 };
 
-export const RemoteContextClearedEvent: Story = {
+export const RemoteContextBoundaryEvent: Story = {
 	parameters: {
 		queries: buildQueries(
 			{
@@ -807,9 +842,19 @@ export const RemoteContextClearedEvent: Story = {
 					event: "message",
 					data: JSON.stringify([
 						{
-							type: "context_cleared",
+							type: "context_boundary",
 							chat_id: CHAT_ID,
-							context_cleared: { chat_id: CHAT_ID },
+							context_boundary: {
+								chat_id: CHAT_ID,
+								event_id: 3,
+								kind: "clear",
+								source: "user",
+								scope: "chat",
+								visible: true,
+								after_event_id: 2,
+								created_at: "2026-02-18T00:00:01.000Z",
+								metadata: {},
+							},
 						},
 					] satisfies TypesGen.ChatStreamEvent[]),
 				},
@@ -817,23 +862,19 @@ export const RemoteContextClearedEvent: Story = {
 		},
 	},
 	beforeEach: () => {
+		const message: TypesGen.ChatMessage = {
+			id: 1,
+			chat_id: CHAT_ID,
+			created_at: "2026-02-18T00:00:00.000Z",
+			role: "user",
+			content: [{ type: "text", text: "Visible history" }],
+		};
 		spyOn(API.experimental, "getChatMessages").mockResolvedValue({
-			messages: [
-				{
-					id: 1,
-					chat_id: CHAT_ID,
-					created_at: "2026-02-18T00:00:00.000Z",
-					role: "user",
-					content: [{ type: "text", text: "Visible history" }],
-				},
-			],
+			messages: [message],
 			queued_messages: [],
-			context_clears: [
-				{
-					id: 2,
-					chat_id: CHAT_ID,
-					created_at: "2026-02-18T00:00:01.000Z",
-				},
+			events: [
+				buildMessageCreatedEvent(message),
+				buildVisibleClearBoundaryEvent({ id: 3, afterEventID: 2 }),
 			],
 			has_more: false,
 		});

@@ -52,10 +52,6 @@ type ChatStreamNotifyMessage struct {
 	// ContextBoundary carries a visible context boundary for stream clients.
 	ContextBoundary *codersdk.ChatStreamContextBoundary `json:"context_boundary,omitempty"`
 
-	// ContextCleared is set when user visible context is cleared.
-	// Subscribers emit a context_cleared stream event for compatibility.
-	ContextCleared bool `json:"context_cleared,omitempty"`
-
 	// FullRefresh signals that subscribers should re-fetch all
 	// messages from the beginning (e.g. after an edit that
 	// truncates message history).

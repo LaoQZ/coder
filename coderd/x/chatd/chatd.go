@@ -4610,19 +4610,6 @@ func (p *Server) Subscribe(
 					}:
 					}
 				}
-				if notify.ContextCleared {
-					select {
-					case <-mergedCtx.Done():
-						return
-					case mergedEvents <- codersdk.ChatStreamEvent{
-						Type:   codersdk.ChatStreamEventTypeContextCleared,
-						ChatID: chatID,
-						ContextCleared: &codersdk.ChatStreamContextCleared{
-							ChatID: chatID,
-						},
-					}:
-					}
-				}
 			case event, ok := <-localParts:
 				if !ok {
 					localParts = nil
@@ -4705,16 +4692,8 @@ func (p *Server) publishClearContextBoundary(event database.ChatEvent) {
 		ChatID:          event.ChatID,
 		ContextBoundary: &boundary,
 	})
-	p.publishEvent(event.ChatID, codersdk.ChatStreamEvent{
-		Type:   codersdk.ChatStreamEventTypeContextCleared,
-		ChatID: event.ChatID,
-		ContextCleared: &codersdk.ChatStreamContextCleared{
-			ChatID: event.ChatID,
-		},
-	})
 	p.publishChatStreamNotify(event.ChatID, coderdpubsub.ChatStreamNotifyMessage{
 		ContextBoundary: &boundary,
-		ContextCleared:  true,
 	})
 }
 
