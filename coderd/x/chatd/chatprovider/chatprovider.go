@@ -663,16 +663,14 @@ func ReasoningEffortFromChat(provider string, value *string) *string {
 
 	switch NormalizeProvider(provider) {
 	case fantasyopenai.Name:
-		return normalizedEnumValue(
-			normalized,
-			string(fantasyopenai.ReasoningEffortMinimal),
-			string(fantasyopenai.ReasoningEffortLow),
-			string(fantasyopenai.ReasoningEffortMedium),
-			string(fantasyopenai.ReasoningEffortHigh),
-			string(fantasyopenai.ReasoningEffortXHigh),
-		)
+		effort := chatopenai.ReasoningEffortFromChat(value)
+		if effort == nil {
+			return nil
+		}
+		valueCopy := string(*effort)
+		return &valueCopy
 	case fantasyanthropic.Name:
-		return normalizedEnumValue(
+		return chatopenai.NormalizedEnumValue(
 			normalized,
 			string(fantasyanthropic.EffortLow),
 			string(fantasyanthropic.EffortMedium),
@@ -681,14 +679,14 @@ func ReasoningEffortFromChat(provider string, value *string) *string {
 			string(fantasyanthropic.EffortMax),
 		)
 	case fantasyopenrouter.Name:
-		return normalizedEnumValue(
+		return chatopenai.NormalizedEnumValue(
 			normalized,
 			string(fantasyopenrouter.ReasoningEffortLow),
 			string(fantasyopenrouter.ReasoningEffortMedium),
 			string(fantasyopenrouter.ReasoningEffortHigh),
 		)
 	case fantasyvercel.Name:
-		return normalizedEnumValue(
+		return chatopenai.NormalizedEnumValue(
 			normalized,
 			string(fantasyvercel.ReasoningEffortNone),
 			string(fantasyvercel.ReasoningEffortMinimal),
@@ -700,16 +698,6 @@ func ReasoningEffortFromChat(provider string, value *string) *string {
 	default:
 		return nil
 	}
-}
-
-func normalizedEnumValue(value string, allowed ...string) *string {
-	for _, candidate := range allowed {
-		if value == strings.ToLower(candidate) {
-			match := candidate
-			return &match
-		}
-	}
-	return nil
 }
 
 // MergeMissingModelCostConfig fills unset pricing metadata from defaults.
@@ -1391,7 +1379,7 @@ func openAICompatProviderOptionsFromChatConfig(
 	options *codersdk.ChatModelOpenAICompatProviderOptions,
 ) *fantasyopenaicompat.ProviderOptions {
 	return &fantasyopenaicompat.ProviderOptions{
-		User:            normalizedStringPointer(options.User),
+		User:            chatopenai.NormalizedStringPointer(options.User),
 		ReasoningEffort: chatopenai.ReasoningEffortFromChat(options.ReasoningEffort),
 	}
 }
@@ -1405,7 +1393,7 @@ func openRouterProviderOptionsFromChatConfig(
 		LogitBias:         options.LogitBias,
 		LogProbs:          options.LogProbs,
 		ParallelToolCalls: options.ParallelToolCalls,
-		User:              normalizedStringPointer(options.User),
+		User:              chatopenai.NormalizedStringPointer(options.User),
 	}
 	if options.Reasoning != nil {
 		result.Reasoning = &fantasyopenrouter.ReasoningOptions{
@@ -1420,11 +1408,11 @@ func openRouterProviderOptionsFromChatConfig(
 			Order:             options.Provider.Order,
 			AllowFallbacks:    options.Provider.AllowFallbacks,
 			RequireParameters: options.Provider.RequireParameters,
-			DataCollection:    normalizedStringPointer(options.Provider.DataCollection),
+			DataCollection:    chatopenai.NormalizedStringPointer(options.Provider.DataCollection),
 			Only:              options.Provider.Only,
 			Ignore:            options.Provider.Ignore,
 			Quantizations:     options.Provider.Quantizations,
-			Sort:              normalizedStringPointer(options.Provider.Sort),
+			Sort:              chatopenai.NormalizedStringPointer(options.Provider.Sort),
 		}
 	}
 	return result
@@ -1434,7 +1422,7 @@ func vercelProviderOptionsFromChatConfig(
 	options *codersdk.ChatModelVercelProviderOptions,
 ) *fantasyvercel.ProviderOptions {
 	result := &fantasyvercel.ProviderOptions{
-		User:              normalizedStringPointer(options.User),
+		User:              chatopenai.NormalizedStringPointer(options.User),
 		LogitBias:         options.LogitBias,
 		LogProbs:          options.LogProbs,
 		TopLogProbs:       options.TopLogProbs,
@@ -1456,17 +1444,6 @@ func vercelProviderOptionsFromChatConfig(
 		}
 	}
 	return result
-}
-
-func normalizedStringPointer(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	trimmed := strings.TrimSpace(*value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
 }
 
 func anthropicEffortFromChat(value *string) *fantasyanthropic.Effort {

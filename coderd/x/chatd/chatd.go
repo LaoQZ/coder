@@ -5766,7 +5766,7 @@ func (p *Server) runChat(
 	}
 	planModeInstructions := p.loadPlanModeInstructions(ctx, currentPlanMode, logger)
 
-	chainInfo := chatopenai.ResolveChainMode(messages)
+	chainInfo := chatopenai.ResolveChainModeInfo(messages)
 	result.PushSummaryModel = model
 	result.ProviderKeys = providerKeys
 	result.FallbackProvider = modelConfig.Provider
@@ -6558,7 +6558,7 @@ func (p *Server) runChat(
 	// we set previous_response_id and send only system instructions
 	// plus the new user input, avoiding redundant replay of prior
 	// assistant and tool messages that the provider already has.
-	chainModeActive := chatopenai.ShouldActivateChainMode(
+	chainModeActive := chatopenai.ShouldActivateChainModeInfo(
 		providerOptions,
 		chainInfo,
 		modelConfig.ID,
@@ -6570,7 +6570,7 @@ func (p *Server) runChat(
 			slog.F("provider_missing_tool_results", chainInfo.ProviderMissingToolResults()),
 			slog.F("is_plan_mode_turn", isPlanModeTurn),
 			slog.F("model_config_match", chainInfo.ModelConfigID() == modelConfig.ID),
-			slog.F("store_enabled", chatopenai.ResponsesStoreEnabled(providerOptions)),
+			slog.F("store_enabled", chatopenai.IsResponsesStoreEnabled(providerOptions)),
 			slog.F("contributing_trailing_user_count", chainInfo.ContributingTrailingUserCount()),
 		)
 	}
@@ -6579,7 +6579,7 @@ func (p *Server) runChat(
 			providerOptions,
 			chainInfo.PreviousResponseID(),
 		)
-		prompt = chatopenai.FilterPromptForChainMode(prompt, chainInfo)
+		prompt = chatopenai.FilterPromptForChainModeInfo(prompt, chainInfo)
 	}
 	activeToolNames := activeToolNamesForTurn(
 		tools,
@@ -6721,14 +6721,14 @@ func (p *Server) runChat(
 			)
 			reloadedPrompt = renderPlanPathPrompt(reloadedPrompt, resolvePlanPathBlock(reloadCtx))
 			if chainModeActive {
-				reloadedPrompt = chatopenai.FilterPromptForChainMode(
+				reloadedPrompt = chatopenai.FilterPromptForChainModeInfo(
 					reloadedPrompt,
 					chainInfo,
 				)
 			}
 			return reloadedPrompt, nil
 		},
-		DisableChainMode: func() {
+		DisableChainModeInfo: func() {
 			chainModeActive = false
 		},
 		PrepareMessages: func(msgs []fantasy.Message) []fantasy.Message {
