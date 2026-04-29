@@ -8621,12 +8621,10 @@ func TestPromoteQueuedRejectsArchivedChat(t *testing.T) {
 	require.ErrorIs(t, err, chatd.ErrChatArchived)
 }
 
-// TestPromoteQueuedWhileRequiresAction verifies that promoting a
-// queued message while the chat is awaiting dynamic tool results
-// closes the pending tool calls with synthetic error results before
-// inserting the user message. Without this, the new turn would
-// contain unresolved tool calls and the LLM API would reject the
-// request, leaving the chat in error.
+// TestPromoteQueuedWhileRequiresAction guards against the
+// stops-dead failure mode: promoting on requires_action without
+// closing pending dynamic tool calls leaves the assistant turn
+// with unresolved tool_call parts that the LLM API rejects.
 func TestPromoteQueuedWhileRequiresAction(t *testing.T) {
 	t.Parallel()
 
@@ -8646,8 +8644,7 @@ func TestPromoteQueuedWhileRequiresAction(t *testing.T) {
 				),
 			)
 		}
-		// After promotion + synthetic results, the resumed run
-		// produces a normal text response.
+		// Second call: the resumed run after promote completes.
 		return chattest.OpenAIStreamingResponse(
 			chattest.OpenAITextChunks("Resumed after promotion.")...,
 		)
@@ -8695,8 +8692,6 @@ func TestPromoteQueuedWhileRequiresAction(t *testing.T) {
 		"expected requires_action, got %s (last_error=%q)",
 		chatBeforePromote.Status, chatBeforePromote.LastError.String)
 
-	// Capture the dynamic tool call ID so we can verify the
-	// synthetic result references it.
 	var pendingToolCallID string
 	testutil.Eventually(ctx, t, func(ctx context.Context) bool {
 		messages, dbErr := db.GetChatMessagesByChatID(ctx, database.GetChatMessagesByChatIDParams{
@@ -8740,15 +8735,12 @@ func TestPromoteQueuedWhileRequiresAction(t *testing.T) {
 		CreatedBy:       user.ID,
 	})
 	require.NoError(t, err)
-	// Synchronous path returns the inserted user message.
 	require.Equal(t, database.ChatMessageRoleUser, promoteResult.PromotedMessage.Role)
 
 	queuedAfter, err := db.GetChatQueuedMessages(ctx, chat.ID)
 	require.NoError(t, err)
 	require.Empty(t, queuedAfter, "queued message should be removed after sync promotion")
 
-	// Verify a synthetic error tool result for the pending dynamic
-	// tool call was inserted before the promoted user message.
 	messages, err := db.GetChatMessagesByChatID(ctx, database.GetChatMessagesByChatIDParams{
 		ChatID:  chat.ID,
 		AfterID: 0,
@@ -8786,7 +8778,6 @@ func TestPromoteQueuedWhileRequiresAction(t *testing.T) {
 	require.Less(t, syntheticToolResult.ID, promotedUserMessage.ID,
 		"synthetic tool result must precede the promoted user message")
 
-	// Chat should resume processing and reach a non-error terminal state.
 	require.Eventually(t, func() bool {
 		got, getErr := db.GetChatByID(ctx, chat.ID)
 		if getErr != nil {
@@ -8802,11 +8793,9 @@ func TestPromoteQueuedWhileRequiresAction(t *testing.T) {
 		final.LastError.String)
 }
 
-// TestPromoteQueuedWhileRequiresActionMixedTools verifies that when a
-// requires_action chat has both built-in (already executed) and
-// dynamic (pending) tool calls, promotion only inserts synthetic
-// results for the dynamic tool calls. Built-in tool calls already
-// have real results so they must not be duplicated.
+// TestPromoteQueuedWhileRequiresActionMixedTools guards against
+// duplicating already-resolved built-in tool results: synthetic
+// results must be scoped to dynamic tool names only.
 func TestPromoteQueuedWhileRequiresActionMixedTools(t *testing.T) {
 	t.Parallel()
 
@@ -8883,8 +8872,8 @@ func TestPromoteQueuedWhileRequiresActionMixedTools(t *testing.T) {
 		"expected requires_action, got %s (last_error=%q)",
 		chatBeforePromote.Status, chatBeforePromote.LastError.String)
 
-	// Wait for the built-in tool result to be persisted and find the
-	// dynamic tool call ID.
+	// The built-in tool resolves before requires_action; capture
+	// its row ID to assert the dynamic synthetic comes after.
 	var (
 		dynamicToolCallID     string
 		builtinToolResultID   int64
@@ -8936,9 +8925,6 @@ func TestPromoteQueuedWhileRequiresActionMixedTools(t *testing.T) {
 	require.NotZero(t, promoteResult.PromotedMessage.ID,
 		"requires_action promotion is synchronous and returns the inserted message")
 
-	// Walk the message log post-promote: only the dynamic tool call
-	// should have a new synthetic IsError result. The built-in tool
-	// result must not be duplicated.
 	messages, err := db.GetChatMessagesByChatID(ctx, database.GetChatMessagesByChatIDParams{
 		ChatID:  chat.ID,
 		AfterID: 0,
@@ -8971,8 +8957,6 @@ func TestPromoteQueuedWhileRequiresActionMixedTools(t *testing.T) {
 	require.Equal(t, 1, builtinResultsForReadFile,
 		"built-in tool result should not be duplicated by promotion")
 
-	// Promoted user message ID is greater than the synthetic
-	// dynamic tool result inserted before it.
 	require.Greater(t, promoteResult.PromotedMessage.ID, builtinToolResultID)
 }
 
@@ -9069,13 +9053,10 @@ func TestAcquireChatsSkipsArchivedPendingChat(t *testing.T) {
 	require.Equal(t, activeChat.ID, acquired[0].ID)
 }
 
-// TestPromoteQueuedWhileRunning verifies that promoting a queued
-// message while the chat is actively streaming defers promotion to
-// the worker's cleanup auto-promote path. The running worker is
-// interrupted, partial assistant output is persisted (because
-// PromoteQueued sets status to waiting, satisfying the persistStep
-// ownership guard), and then the auto-promote step inserts the
-// queued message into chat history.
+// TestPromoteQueuedWhileRunning guards against the data-loss
+// failure mode: promoting on a streaming chat must preserve
+// partial assistant output by deferring the user-message insert
+// to the worker's auto-promote.
 func TestPromoteQueuedWhileRunning(t *testing.T) {
 	t.Parallel()
 
@@ -9090,9 +9071,7 @@ func TestPromoteQueuedWhileRunning(t *testing.T) {
 			return chattest.OpenAINonStreamingResponse("running-promote")
 		}
 		if streamCallCount.Add(1) > 1 {
-			// After the running-case interrupt, the auto-promoted
-			// user message triggers a fresh streaming request.
-			// Return a normal text response so the chat can settle.
+			// Subsequent calls are the resumed run; let it settle.
 			return chattest.OpenAIStreamingResponse(
 				chattest.OpenAITextChunks("resumed after promotion")...,
 			)
@@ -9161,12 +9140,10 @@ func TestPromoteQueuedWhileRunning(t *testing.T) {
 		CreatedBy:       user.ID,
 	})
 	require.NoError(t, err)
-	// Running-case promotion is deferred to the worker's auto-promote;
-	// the user message is not synchronously inserted.
+	// Deferred promotion: no synchronous user message.
 	require.Zero(t, promoteResult.PromotedMessage.ID)
 
-	// The interrupt should now flow: control subscriber sees waiting,
-	// cancels the worker, the mock unblocks.
+	// Worker observes waiting and cancels.
 	testutil.Eventually(ctx, t, func(ctx context.Context) bool {
 		select {
 		case <-streamCanceled:
@@ -9176,10 +9153,6 @@ func TestPromoteQueuedWhileRunning(t *testing.T) {
 		}
 	}, testutil.IntervalFast)
 
-	// The chat should reach waiting after the auto-promote completes
-	// (auto-promote pops the message and sets pending; that pending
-	// run will eventually finish in waiting because the mock provider
-	// returns no further streaming work after release).
 	require.Eventually(t, func() bool {
 		got, getErr := db.GetChatByID(ctx, chat.ID)
 		if getErr != nil {
@@ -9188,11 +9161,8 @@ func TestPromoteQueuedWhileRunning(t *testing.T) {
 		return got.Status == database.ChatStatusWaiting && !got.WorkerID.Valid
 	}, testutil.WaitLong, testutil.IntervalFast)
 
-	// After the worker resumes processing, the promoted user message
-	// must appear in chat history with a higher ID than the persisted
-	// partial assistant output. The partial assistant output is
-	// preserved because PromoteQueued sets waiting (not pending),
-	// satisfying the persistStep ownership guard.
+	// Partial assistant output is preserved (not lost as it was
+	// pre-fix) and precedes the promoted user message.
 	messages, err := db.GetChatMessagesByChatID(ctx, database.GetChatMessagesByChatIDParams{
 		ChatID:  chat.ID,
 		AfterID: 0,
@@ -9231,10 +9201,9 @@ func TestPromoteQueuedWhileRunning(t *testing.T) {
 		"promoted user message must follow the persisted partial output")
 }
 
-// TestPromoteQueuedWhileRunningRespectsMessageOrder verifies that
-// when multiple messages are queued (A, B, C in FIFO order) and the
-// caller promotes B, B is delivered first while A and C remain
-// queued in their original relative order with stable IDs.
+// TestPromoteQueuedWhileRunningRespectsMessageOrder guards
+// against losing or reshuffling sibling queued messages when one
+// is promoted out-of-order.
 func TestPromoteQueuedWhileRunningRespectsMessageOrder(t *testing.T) {
 	t.Parallel()
 
@@ -9326,8 +9295,8 @@ func TestPromoteQueuedWhileRunningRespectsMessageOrder(t *testing.T) {
 	require.Zero(t, promoteResult.PromotedMessage.ID,
 		"running-case promotion is deferred to auto-promote")
 
-	// Immediately after PromoteQueued returns, the queue should be
-	// reordered to [B, A, C] with stable IDs.
+	// PromoteQueued reorders to [B, A, C]. IDs are stable because
+	// only created_at is mutated.
 	queuedAfterPromote, err := db.GetChatQueuedMessages(ctx, chat.ID)
 	require.NoError(t, err)
 	require.Len(t, queuedAfterPromote, 3)
@@ -9338,11 +9307,8 @@ func TestPromoteQueuedWhileRunningRespectsMessageOrder(t *testing.T) {
 	require.Equal(t, queueC.QueuedMessage.ID, queuedAfterPromote[2].ID,
 		"non-promoted messages preserve their relative order")
 
-	// After auto-promote, B must appear as a user message in chat
-	// history. A and C may still be in the queue or have been
-	// further auto-promoted into history; either way their content
-	// must not have been lost. Polling for B in history avoids
-	// racing the worker's auto-promote pipeline.
+	// Poll for B in history rather than asserting the queue
+	// state, which races the worker's auto-promote pipeline.
 	require.Eventually(t, func() bool {
 		messages, getErr := db.GetChatMessagesByChatID(ctx, database.GetChatMessagesByChatIDParams{
 			ChatID:  chat.ID,
@@ -9369,8 +9335,7 @@ func TestPromoteQueuedWhileRunningRespectsMessageOrder(t *testing.T) {
 	}, testutil.WaitLong, testutil.IntervalFast,
 		"the promoted message B must appear in chat history")
 
-	// A and C must not be lost: each must be either still queued or
-	// already promoted to history. We track them by content and ID.
+	// A and C must end up in queue or history, not dropped.
 	remainingIDs := map[int64]bool{}
 	remainingQueue, err := db.GetChatQueuedMessages(ctx, chat.ID)
 	require.NoError(t, err)
