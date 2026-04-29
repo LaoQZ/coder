@@ -1,13 +1,12 @@
-# Early Access
+# Beta
 
-Coder Agents is available through Early Access for the community
-to evaluate while the product is under active development.
-Participation comes with important expectations and limitations described
-below.
+Coder Agents is available in Beta for the community to evaluate while
+the product continues to mature. Participation comes with important
+expectations and limitations described below.
 
-## What Early Access includes
+## What Beta includes
 
-Early Access is a collaborative evaluation period between Coder and
+Beta is a collaborative evaluation period between Coder and
 participating customers. It includes:
 
 - **Direct collaboration with the Coder product team** — work with Coder
@@ -21,9 +20,9 @@ participating customers. It includes:
 - **Early exposure to new capabilities** — access to new features or
   experimental functionality before public release.
 
-## What Early Access does not include
+## What Beta does not include
 
-Early Access is not a production-ready offering. It does not include:
+Beta is not a production-ready offering. It does not include:
 
 - **Formal support coverage** — no SLA-backed support.
 - **Stability guarantees** — features and behavior may change without notice.
@@ -36,13 +35,13 @@ Early Access is not a production-ready offering. It does not include:
 
 ## Feature scope
 
-Functionality available during Early Access may be a subset of planned
+Functionality available during Beta may be a subset of planned
 capabilities. Some features may be incomplete, experimental, or subject to
 redesign.
 
 ## Enable Coder Agents
 
-Coder Agents is experimental and must not be deployed to production
+Coder Agents is in Beta and must not be deployed to production
 environments. It is gated behind the `agents` experiment flag. To enable it,
 pass the flag when starting the Coder server using an environment variable
 or CLI flag:
@@ -72,12 +71,12 @@ Once the server restarts with the experiment enabled:
 
 ## Licensing and availability
 
-Features provided during Early Access may become paid licensed
+Features provided during Beta may become paid licensed
 features at General Availability.
 Participants will receive reasonable advance notice before:
 
 - Coder Agents reaches General Availability
-- Early Access functionality transitions to a paid offering
+- Beta functionality transitions to a paid offering
 
 ## Providing feedback
 
