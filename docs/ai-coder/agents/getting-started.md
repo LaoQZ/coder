@@ -28,24 +28,7 @@ Before you begin, confirm the following:
   Owners can assign this from **Admin** > **Users**. See
   [Grant Coder Agents User](#step-3-grant-coder-agents-user) below.
 
-## Step 1: Enable the experiment
-
-Coder Agents is gated behind the `agents` experiment flag. Pass it when
-starting the Coder server:
-
-```sh
-CODER_EXPERIMENTS="agents" coder server
-# or
-coder server --experiments=agents
-```
-
-If you already use other experiments, add `agents` to the comma-separated list:
-
-```sh
-CODER_EXPERIMENTS="agents,oauth2,mcp-server-http" coder server
-```
-
-## Step 2: Configure an LLM provider and model
+## Step 1: Configure an LLM provider and model
 
 > [!IMPORTANT]
 > Configuring providers, models, and system prompts requires the
@@ -69,7 +52,7 @@ Detailed instructions for each provider and model option are in the
 > Start with a single frontier model to validate your setup before adding
 > additional providers.
 
-## Step 3: Grant Coder Agents User
+## Step 2: Grant Coder Agents User
 
 The **Coder Agents User** role controls which users can interact with Coder Agents.
 Members do not have Coder Agents User by default.
@@ -102,7 +85,7 @@ coder users list -o json \
     done
 ```
 
-## Step 4: Start your first Coder Agent
+## Step 3: Start your first Coder Agent Chat
 
 1. Go to the **Agents** page in the Coder dashboard.
 1. Select a model from the dropdown (your default will be pre-selected).
