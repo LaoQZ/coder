@@ -26,7 +26,7 @@ Before you begin, confirm the following:
   configuring providers.
 - **Coder Agents User role** assigned to each user who needs to interact with Coder Agents.
   Owners can assign this from **Admin** > **Users**. See
-  [Grant Coder Agents User](#step-3-grant-coder-agents-user) below.
+  [Grant Coder Agents User](#step-2-grant-coder-agents-user) below.
 
 ## Step 1: Configure an LLM provider and model
 
