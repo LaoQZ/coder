@@ -65,3 +65,23 @@ RETURNING *;
 DELETE FROM user_secrets
 WHERE user_id = @user_id AND name = @name
 RETURNING *;
+
+-- name: GetUserSecretsCountPerUserForTelemetry :many
+-- Returns one row per user with at least one secret, used by the
+-- telemetry snapshot.
+SELECT
+    user_id,
+    COUNT(*)::bigint AS secret_count
+FROM user_secrets
+GROUP BY user_id;
+
+-- name: GetUserSecretsTelemetrySummary :one
+-- Returns deployment-wide counts of secrets grouped by which
+-- injection fields are populated, used by the telemetry snapshot.
+SELECT
+    COUNT(DISTINCT user_id)::bigint                                    AS users_with_secrets,
+    COUNT(*) FILTER (WHERE env_name != '' AND file_path = '' )::bigint AS env_name_only,
+    COUNT(*) FILTER (WHERE env_name = ''  AND file_path != '')::bigint AS file_path_only,
+    COUNT(*) FILTER (WHERE env_name != '' AND file_path != '')::bigint AS both,
+    COUNT(*) FILTER (WHERE env_name = ''  AND file_path = '' )::bigint AS neither
+FROM user_secrets;

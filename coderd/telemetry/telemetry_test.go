@@ -1991,3 +1991,75 @@ func TestChatDiffStatusSummaryTelemetry(t *testing.T) {
 	assert.Equal(t, int64(2), snapshot2.ChatDiffStatusSummary.Merged)
 	assert.Equal(t, int64(1), snapshot2.ChatDiffStatusSummary.Closed)
 }
+
+func TestUserSecretsTelemetry(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	db, _ := dbtestutil.NewDB(t)
+
+	// Empty deployment should report a non-nil summary with zero
+	// counts and no per-user rows.
+	_, empty := collectSnapshot(ctx, t, db, nil)
+	require.Empty(t, empty.UserSecretsCountPerUser)
+	require.NotNil(t, empty.UserSecretsSummary)
+	assert.Equal(t, int64(0), empty.UserSecretsSummary.UsersWithSecrets)
+	assert.Equal(t, int64(0), empty.UserSecretsSummary.EnvNameOnly)
+	assert.Equal(t, int64(0), empty.UserSecretsSummary.FilePathOnly)
+	assert.Equal(t, int64(0), empty.UserSecretsSummary.Both)
+	assert.Equal(t, int64(0), empty.UserSecretsSummary.Neither)
+
+	userA := dbgen.User(t, db, database.User{})
+	userB := dbgen.User(t, db, database.User{})
+
+	// userA: env-only and file-only. dbgen.UserSecret defaults
+	// EnvName and FilePath to non-empty, so use mutators to clear
+	// them where the test wants empty values.
+	_ = dbgen.UserSecret(t, db, database.UserSecret{
+		UserID: userA.ID,
+		Name:   "a-env",
+	}, func(p *database.CreateUserSecretParams) {
+		p.EnvName = "A_ENV"
+		p.FilePath = ""
+	})
+	_ = dbgen.UserSecret(t, db, database.UserSecret{
+		UserID: userA.ID,
+		Name:   "a-file",
+	}, func(p *database.CreateUserSecretParams) {
+		p.EnvName = ""
+		p.FilePath = "/home/coder/a.file"
+	})
+	// userB: both and neither.
+	_ = dbgen.UserSecret(t, db, database.UserSecret{
+		UserID: userB.ID,
+		Name:   "b-both",
+	}, func(p *database.CreateUserSecretParams) {
+		p.EnvName = "B_BOTH"
+		p.FilePath = "/home/coder/b.both"
+	})
+	_ = dbgen.UserSecret(t, db, database.UserSecret{
+		UserID: userB.ID,
+		Name:   "b-neither",
+	}, func(p *database.CreateUserSecretParams) {
+		p.EnvName = ""
+		p.FilePath = ""
+	})
+	_, snapshot := collectSnapshot(ctx, t, db, nil)
+
+	// Per-user rows: one row per user, with the right counts.
+	require.Len(t, snapshot.UserSecretsCountPerUser, 2)
+	counts := map[uuid.UUID]int64{}
+	for _, row := range snapshot.UserSecretsCountPerUser {
+		counts[row.UserID] = row.SecretCount
+	}
+	assert.Equal(t, int64(2), counts[userA.ID])
+	assert.Equal(t, int64(2), counts[userB.ID])
+
+	// Summary: one of each configuration variant.
+	require.NotNil(t, snapshot.UserSecretsSummary)
+	assert.Equal(t, int64(2), snapshot.UserSecretsSummary.UsersWithSecrets)
+	assert.Equal(t, int64(1), snapshot.UserSecretsSummary.EnvNameOnly)
+	assert.Equal(t, int64(1), snapshot.UserSecretsSummary.FilePathOnly)
+	assert.Equal(t, int64(1), snapshot.UserSecretsSummary.Both)
+	assert.Equal(t, int64(1), snapshot.UserSecretsSummary.Neither)
+}

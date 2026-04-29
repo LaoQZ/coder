@@ -5705,6 +5705,14 @@ func (s *MethodTestSuite) TestUserSecrets() {
 			Asserts(secret, policy.ActionRead).
 			Returns(secret)
 	}))
+	s.Run("GetUserSecretsCountPerUserForTelemetry", s.Mocked(func(dbm *dbmock.MockStore, _ *gofakeit.Faker, check *expects) {
+		dbm.EXPECT().GetUserSecretsCountPerUserForTelemetry(gomock.Any()).Return([]database.GetUserSecretsCountPerUserForTelemetryRow{}, nil).AnyTimes()
+		check.Args().Asserts(rbac.ResourceSystem, policy.ActionRead)
+	}))
+	s.Run("GetUserSecretsTelemetrySummary", s.Mocked(func(dbm *dbmock.MockStore, _ *gofakeit.Faker, check *expects) {
+		dbm.EXPECT().GetUserSecretsTelemetrySummary(gomock.Any()).Return(database.GetUserSecretsTelemetrySummaryRow{}, nil).AnyTimes()
+		check.Args().Asserts(rbac.ResourceSystem, policy.ActionRead)
+	}))
 }
 
 func (s *MethodTestSuite) TestUsageEvents() {

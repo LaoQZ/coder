@@ -706,6 +706,12 @@ type sqlcQuerier interface {
 	GetUserNotificationPreferences(ctx context.Context, userID uuid.UUID) ([]NotificationPreference, error)
 	GetUserSecretByID(ctx context.Context, id uuid.UUID) (UserSecret, error)
 	GetUserSecretByUserIDAndName(ctx context.Context, arg GetUserSecretByUserIDAndNameParams) (UserSecret, error)
+	// Returns one row per user with at least one secret, used by the
+	// telemetry snapshot.
+	GetUserSecretsCountPerUserForTelemetry(ctx context.Context) ([]GetUserSecretsCountPerUserForTelemetryRow, error)
+	// Returns deployment-wide counts of secrets grouped by which
+	// injection fields are populated, used by the telemetry snapshot.
+	GetUserSecretsTelemetrySummary(ctx context.Context) (GetUserSecretsTelemetrySummaryRow, error)
 	// GetUserStatusCounts returns the count of users in each status over time.
 	// The time range is inclusively defined by the start_time and end_time parameters.
 	GetUserStatusCounts(ctx context.Context, arg GetUserStatusCountsParams) ([]GetUserStatusCountsRow, error)

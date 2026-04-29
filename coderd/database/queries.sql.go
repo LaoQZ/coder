@@ -24736,6 +24736,77 @@ func (q *sqlQuerier) GetUserSecretByUserIDAndName(ctx context.Context, arg GetUs
 	return i, err
 }
 
+const getUserSecretsCountPerUserForTelemetry = `-- name: GetUserSecretsCountPerUserForTelemetry :many
+SELECT
+    user_id,
+    COUNT(*)::bigint AS secret_count
+FROM user_secrets
+GROUP BY user_id
+`
+
+type GetUserSecretsCountPerUserForTelemetryRow struct {
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	SecretCount int64     `db:"secret_count" json:"secret_count"`
+}
+
+// Returns one row per user with at least one secret, used by the
+// telemetry snapshot.
+func (q *sqlQuerier) GetUserSecretsCountPerUserForTelemetry(ctx context.Context) ([]GetUserSecretsCountPerUserForTelemetryRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserSecretsCountPerUserForTelemetry)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserSecretsCountPerUserForTelemetryRow
+	for rows.Next() {
+		var i GetUserSecretsCountPerUserForTelemetryRow
+		if err := rows.Scan(&i.UserID, &i.SecretCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserSecretsTelemetrySummary = `-- name: GetUserSecretsTelemetrySummary :one
+SELECT
+    COUNT(DISTINCT user_id)::bigint                                    AS users_with_secrets,
+    COUNT(*) FILTER (WHERE env_name != '' AND file_path = '' )::bigint AS env_name_only,
+    COUNT(*) FILTER (WHERE env_name = ''  AND file_path != '')::bigint AS file_path_only,
+    COUNT(*) FILTER (WHERE env_name != '' AND file_path != '')::bigint AS both,
+    COUNT(*) FILTER (WHERE env_name = ''  AND file_path = '' )::bigint AS neither
+FROM user_secrets
+`
+
+type GetUserSecretsTelemetrySummaryRow struct {
+	UsersWithSecrets int64 `db:"users_with_secrets" json:"users_with_secrets"`
+	EnvNameOnly      int64 `db:"env_name_only" json:"env_name_only"`
+	FilePathOnly     int64 `db:"file_path_only" json:"file_path_only"`
+	Both             int64 `db:"both" json:"both"`
+	Neither          int64 `db:"neither" json:"neither"`
+}
+
+// Returns deployment-wide counts of secrets grouped by which
+// injection fields are populated, used by the telemetry snapshot.
+func (q *sqlQuerier) GetUserSecretsTelemetrySummary(ctx context.Context) (GetUserSecretsTelemetrySummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserSecretsTelemetrySummary)
+	var i GetUserSecretsTelemetrySummaryRow
+	err := row.Scan(
+		&i.UsersWithSecrets,
+		&i.EnvNameOnly,
+		&i.FilePathOnly,
+		&i.Both,
+		&i.Neither,
+	)
+	return i, err
+}
+
 const listUserSecrets = `-- name: ListUserSecrets :many
 SELECT
     id, user_id, name, description,
