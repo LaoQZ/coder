@@ -78,9 +78,13 @@ import "github.com/coder/coder/v2/apiversion"
 //
 // API v1.16:
 //   - Added `merge_strategy` field to `provisioner.Env` message
+//
+// API v1.17:
+//   - Added new message type `DLPPolicy`.
+//   - Added new field `dlp_policy` to `provisioner.Agent`.
 const (
 	CurrentMajor = 1
-	CurrentMinor = 16
+	CurrentMinor = 17
 )
 
 // CurrentVersion is the current provisionerd API version.
