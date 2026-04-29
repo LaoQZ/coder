@@ -5707,11 +5707,11 @@ func (s *MethodTestSuite) TestUserSecrets() {
 	}))
 	s.Run("GetUserSecretsCountPerUserForTelemetry", s.Mocked(func(dbm *dbmock.MockStore, _ *gofakeit.Faker, check *expects) {
 		dbm.EXPECT().GetUserSecretsCountPerUserForTelemetry(gomock.Any()).Return([]database.GetUserSecretsCountPerUserForTelemetryRow{}, nil).AnyTimes()
-		check.Args().Asserts(rbac.ResourceSystem, policy.ActionRead)
+		check.Args().Asserts(rbac.ResourceUserSecret, policy.ActionRead)
 	}))
 	s.Run("GetUserSecretsTelemetrySummary", s.Mocked(func(dbm *dbmock.MockStore, _ *gofakeit.Faker, check *expects) {
 		dbm.EXPECT().GetUserSecretsTelemetrySummary(gomock.Any()).Return(database.GetUserSecretsTelemetrySummaryRow{}, nil).AnyTimes()
-		check.Args().Asserts(rbac.ResourceSystem, policy.ActionRead)
+		check.Args().Asserts(rbac.ResourceUserSecret, policy.ActionRead)
 	}))
 }
 
