@@ -2797,7 +2797,7 @@ func (api *API) promoteChatQueuedMessage(rw http.ResponseWriter, r *http.Request
 		return
 	}
 
-	promoteResult, txErr := api.chatDaemon.PromoteQueued(ctx, chatd.PromoteQueuedOptions{
+	_, txErr := api.chatDaemon.PromoteQueued(ctx, chatd.PromoteQueuedOptions{
 		ChatID:          chatID,
 		CreatedBy:       apiKey.UserID,
 		QueuedMessageID: queuedMessageID,
@@ -2820,7 +2820,9 @@ func (api *API) promoteChatQueuedMessage(rw http.ResponseWriter, r *http.Request
 		return
 	}
 
-	httpapi.Write(ctx, rw, http.StatusOK, convertChatMessage(promoteResult.PromotedMessage))
+	httpapi.Write(ctx, rw, http.StatusAccepted, codersdk.Response{
+		Message: "Queued message promotion accepted.",
+	})
 }
 
 // markChatAsRead updates the last read message ID for a chat to the
