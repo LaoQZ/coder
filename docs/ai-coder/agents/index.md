@@ -322,5 +322,4 @@ Coder Agents is a new approach that differs from
 ## Product status
 
 Coder Agents is in Beta. The feature is under active development and
-available for evaluation. See [Beta](./early-access.md) for
-enablement instructions and program details.
+available for evaluation.

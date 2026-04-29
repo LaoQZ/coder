@@ -1217,12 +1217,6 @@
 							"state": ["beta"]
 						},
 						{
-							"title": "Beta",
-							"description": "About the Coder Agents Beta program",
-							"path": "./ai-coder/agents/early-access.md",
-							"state": ["beta"]
-						},
-						{
 							"title": "Architecture",
 							"description": "How the agent in the control plane communicates with workspaces",
 							"path": "./ai-coder/agents/architecture.md",

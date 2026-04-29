@@ -4,7 +4,7 @@ This guide walks platform teams and administrators through enabling Coder
 Agents, preparing your deployment, and running your first Coder Agent.
 
 > [!NOTE]
-> Coder Agents is in [Beta](./early-access.md). Deploy to a
+> Coder Agents is in Beta. Deploy to a
 > **test or development environment** — not production — while evaluating
 > the feature.
 
@@ -44,9 +44,6 @@ If you already use other experiments, add `agents` to the comma-separated list:
 ```sh
 CODER_EXPERIMENTS="agents,oauth2,mcp-server-http" coder server
 ```
-
-See [Enable Coder Agents](./early-access.md#enable-coder-agents) for full
-details.
 
 ## Step 2: Configure an LLM provider and model
 
@@ -156,8 +153,7 @@ credential scoping, and pre-installing dependencies.
 Coder Agents is under active development. APIs, behavior, and configuration
 may change between releases without notice. Run your evaluation on a
 dedicated test or staging deployment to avoid disruption to production
-developer workflows. See [Beta](./early-access.md) for the full
-set of expectations and limitations.
+developer workflows.
 
 ### Use HTTPS for push notifications
 
