@@ -1,6 +1,7 @@
 {
 	"name": "coder-docs-generator",
 	"private": true,
+	"homepage": "/doc",
 	"scripts": {
 		"dev": "pnpm copy-images && next dev",
 		"build": "next build",
